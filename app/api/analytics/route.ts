@@ -17,8 +17,6 @@ import {
   getTopSearchPages,
 } from '@/lib/search-console';
 import { getClarityMetrics } from '@/lib/microsoft-clarity';
-import { getBatchSearchRanks } from '@/lib/google-custom-search';
-import { IMPORTANT_KEYWORDS } from '@/lib/search-console';
 import { AnalyticsData, SEOKPIMetrics } from '@/types/analytics';
 
 /**
@@ -171,38 +169,6 @@ export async function GET(request: Request) {
       const siteUrl = process.env.SEARCH_CONSOLE_SITE_URL;
 
       if (siteUrl) {
-        // Calculate previous period dates for trend comparison
-        const previousEndDate = new Date(startDate);
-        previousEndDate.setDate(previousEndDate.getDate() - 1);
-        const previousStartDate = new Date(previousEndDate);
-        previousStartDate.setDate(previousStartDate.getDate() - days);
-
-        const previousStartDateStr = previousStartDate.toISOString().split('T')[0];
-        const previousEndDateStr = previousEndDate.toISOString().split('T')[0];
-
-        // Custom Search APIで重要キーワードの順位を取得（Sheetsキャッシュ使用）
-        const targetDomain = siteUrl.replace('sc-domain:', ''); // "sc-domain:yumesuta.com" → "yumesuta.com"
-        const keywords = IMPORTANT_KEYWORDS.map(k => k.keyword);
-        const tasksSpreadsheetId = process.env.TASKS_SPREADSHEET_ID!;
-        const searchRanks = await getBatchSearchRanks(keywords, targetDomain, tasksSpreadsheetId);
-
-        // KeywordRanking型に変換
-        const keywordRankings = searchRanks.map((rank, index) => {
-          const keywordDef = IMPORTANT_KEYWORDS[index];
-          return {
-            keyword: rank.keyword,
-            position: rank.position,
-            previousPosition: undefined, // TODO: 前回データと比較
-            change: undefined,
-            trend: 'new' as const,
-            clicks: 0, // Custom Search APIでは取得不可
-            impressions: rank.found ? 1 : 0, // 見つかったかどうかのフラグとして使用
-            ctr: 0,
-            priority: keywordDef.priority,
-            targetPosition: keywordDef.targetPosition,
-          };
-        });
-
         const [metrics, topQueries, topPages] = await Promise.all([
           getSearchPerformance(siteUrl, startDateStr, endDateStr),
           getTopQueries(siteUrl, startDateStr, endDateStr, 10),
@@ -213,7 +179,6 @@ export async function GET(request: Request) {
           metrics,
           topQueries,
           topPages,
-          keywordRankings,
         };
       }
     } catch (error) {

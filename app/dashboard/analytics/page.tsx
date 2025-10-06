@@ -16,11 +16,30 @@ import {
 } from 'lucide-react';
 import { AnalyticsData } from '@/types/analytics';
 
+interface KeywordRankData {
+  keyword: string;
+  googleRank: number | null;
+  yahooRank: number | null;
+  bingRank: number | null;
+  googleHits: number | null;
+  yahooHits: number | null;
+  bingHits: number | null;
+  updatedAt: string;
+}
+
 export default function AnalyticsDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+
+  // キーワード順位関連のstate
+  const [keywordRanks, setKeywordRanks] = useState<KeywordRankData[]>([]);
+  const [pastedData, setPastedData] = useState('');
+  const [savingRanks, setSavingRanks] = useState(false);
+  const [rankError, setRankError] = useState<string | null>(null);
+  const [rankSuccess, setRankSuccess] = useState<string | null>(null);
+  const [showInputForm, setShowInputForm] = useState(false);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -42,9 +61,57 @@ export default function AnalyticsDashboard() {
     }
   };
 
+  // キーワード順位を取得
+  const fetchKeywordRanks = async () => {
+    try {
+      const res = await fetch('/api/keyword-rank');
+      const json = await res.json();
+      if (json.success) {
+        setKeywordRanks(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch keyword ranks:', err);
+    }
+  };
+
+  // キーワード順位を保存
+  const handleSaveRanks = async () => {
+    if (!pastedData.trim()) {
+      setRankError('データを貼り付けてください');
+      return;
+    }
+
+    setSavingRanks(true);
+    setRankError(null);
+    setRankSuccess(null);
+
+    try {
+      const res = await fetch('/api/keyword-rank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pastedData }),
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setRankSuccess(json.message);
+        setPastedData('');
+        await fetchKeywordRanks(); // データを再取得
+      } else {
+        setRankError(json.error);
+      }
+    } catch (err: any) {
+      setRankError(err.message || '保存に失敗しました');
+    } finally {
+      setSavingRanks(false);
+    }
+  };
+
   // 初回マウント時に自動でデータ取得
   useEffect(() => {
     handleRefresh();
+    fetchKeywordRanks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -340,137 +407,129 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* KPI Details Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Brand vs Non-Brand Keyword Ratio */}
+            <div className="mb-8">
+              {/* LLMO対策推奨アクション */}
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  流入元キーワード分析
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-orange-600" />
+                  LLMO対策推奨アクション
                 </h3>
 
-                {/* 視覚的な円グラフ風プログレスバー */}
-                <div className="mb-6">
-                  <div className="relative h-8 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="absolute h-full bg-blue-600 transition-all duration-300"
-                      style={{
-                        width: `${data.kpiMetrics.brandKeywordRatio.brandPercentage}%`,
-                      }}
-                    />
-                    <div
-                      className="absolute h-full bg-green-600 transition-all duration-300"
-                      style={{
-                        left: `${data.kpiMetrics.brandKeywordRatio.brandPercentage}%`,
-                        width: `${data.kpiMetrics.brandKeywordRatio.nonBrandPercentage}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-2 text-xs text-gray-600">
-                    <span>ブランドワード {data.kpiMetrics.brandKeywordRatio.brandPercentage.toFixed(1)}%</span>
-                    <span>一般ワード {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {/* ブランドワード */}
-                  <div className="border-l-4 border-blue-600 pl-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🔵</span>
-                        <span className="font-bold text-gray-900">ブランドワード</span>
-                      </div>
-                      <span className="text-lg font-bold text-blue-600">
-                        {data.kpiMetrics.brandKeywordRatio.brandPercentage.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      {formatNumber(data.kpiMetrics.brandKeywordRatio.brandClicks)} クリック
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-1">
-                      <div>├ ゆめスタ</div>
-                      <div>└ ゆめマガ</div>
-                    </div>
-                  </div>
-
-                  {/* 一般ワード */}
-                  <div className="border-l-4 border-green-600 pl-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🟢</span>
-                        <span className="font-bold text-gray-900">一般ワード</span>
-                      </div>
-                      <span className="text-lg font-bold text-green-600">
-                        {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      {formatNumber(data.kpiMetrics.brandKeywordRatio.nonBrandClicks)} クリック
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-1">
-                      <div>├ 高校生 就職</div>
-                      <div>├ 愛知 高卒採用</div>
-                      <div>└ その他</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 目標達成状況 */}
-                <div className={`mt-6 p-4 rounded-lg ${
-                  data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30
-                    ? 'bg-green-50 border border-green-200'
-                    : 'bg-yellow-50 border border-yellow-200'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">🎯</span>
-                    <span className="font-bold text-gray-900">目標: 一般ワード30%以上</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-3 bg-white rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30
-                            ? 'bg-green-600'
-                            : 'bg-yellow-600'
-                        }`}
-                        style={{
-                          width: `${Math.min(
-                            (data.kpiMetrics.brandKeywordRatio.nonBrandPercentage / 30) * 100,
-                            100
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                    <span className={`text-sm font-bold ${
-                      data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30
-                        ? 'text-green-600'
-                        : 'text-yellow-600'
-                    }`}>
-                      {((data.kpiMetrics.brandKeywordRatio.nonBrandPercentage / 30) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-600 mt-2">
-                    進捗: {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}% / 30%
-                    {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30
-                      ? ' ✅ 達成'
-                      : ` (あと${(30 - data.kpiMetrics.brandKeywordRatio.nonBrandPercentage).toFixed(1)}%)`
-                    }
-                  </div>
-                  {data.kpiMetrics.brandKeywordRatio.nonBrandClicks === 0 && (
-                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded">
-                      <div className="flex items-start gap-2">
-                        <span className="text-orange-600 font-bold">⚠️</span>
+                <div className="space-y-3">
+                  {/* LLM流入ゼロの場合 */}
+                  {data.kpiMetrics.llmStatus.totalSessions === 0 && (
+                    <div className="border-l-4 border-red-600 bg-red-50 p-4 rounded">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl">🚨</span>
                         <div className="flex-1">
-                          <p className="text-xs font-medium text-orange-800">
-                            一般ワードからのクリックがゼロです
+                          <p className="font-bold text-red-900 mb-1">緊急: LLMからの流入がゼロです</p>
+                          <p className="text-sm text-red-700 mb-2">
+                            ChatGPT・Perplexity・Geminiなどの生成AIからのアクセスが検出されていません
                           </p>
-                          <p className="text-xs text-orange-600 mt-1">
-                            推奨施策: SEOコンテンツ強化、メタディスクリプション改善
+                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                            <p className="font-bold text-red-800">推奨対策:</p>
+                            <p>1. Q&A形式のコンテンツを追加（「高校生 就職 愛知 よくある質問」など）</p>
+                            <p>2. FAQページを作成・充実化</p>
+                            <p>3. 構造化データ（Schema.org）を実装</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* お問い合わせゼロの場合 */}
+                  {data.kpiMetrics.kgi.inquiries === 0 && (
+                    <div className="border-l-4 border-orange-600 bg-orange-50 p-4 rounded">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl">⚠️</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-orange-900 mb-1">重要: お問い合わせがゼロです</p>
+                          <p className="text-sm text-orange-700 mb-2">
+                            過去{days}日間でコンバージョンが発生していません
                           </p>
+                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                            <p className="font-bold text-orange-800">推奨対策:</p>
+                            <p>1. CTAボタンの配置・文言を見直し</p>
+                            <p>2. お問い合わせフォームを簡略化</p>
+                            <p>3. GA4イベント設定の確認（generate_leadイベントが正しく発火しているか）</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* セッション目標未達の場合 */}
+                  {data.kpiMetrics.kgi.sessionAchievementRate < 80 && (
+                    <div className="border-l-4 border-yellow-600 bg-yellow-50 p-4 rounded">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl">📊</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-yellow-900 mb-1">
+                            セッション数が目標の{data.kpiMetrics.kgi.sessionAchievementRate.toFixed(0)}%です
+                          </p>
+                          <p className="text-sm text-yellow-700 mb-2">
+                            目標まであと {formatNumber(data.kpiMetrics.kgi.targetSessions - data.kpiMetrics.kgi.sessions)} セッション
+                          </p>
+                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                            <p className="font-bold text-yellow-800">推奨対策:</p>
+                            <p>1. SNS投稿頻度を増やす（週3回→毎日）</p>
+                            <p>2. 検索順位の低いキーワードのコンテンツ改善</p>
+                            <p>3. 内部リンク構造の最適化</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 一般ワード比率が低い場合 */}
+                  {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage < 30 && (
+                    <div className="border-l-4 border-blue-600 bg-blue-50 p-4 rounded">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl">🎯</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-blue-900 mb-1">
+                            一般ワード比率が{data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}%（目標30%）
+                          </p>
+                          <p className="text-sm text-blue-700 mb-2">
+                            ブランド名以外のキーワードからの流入を増やす必要があります
+                          </p>
+                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                            <p className="font-bold text-blue-800">推奨対策:</p>
+                            <p>1. 「高校生 就職 愛知」などのロングテールキーワード記事を作成</p>
+                            <p>2. 既存ページのタイトル・見出しにキーワードを追加</p>
+                            <p>3. 検索意図に合ったコンテンツの拡充</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* すべて順調な場合 */}
+                  {data.kpiMetrics.llmStatus.totalSessions > 0 &&
+                    data.kpiMetrics.kgi.inquiries > 0 &&
+                    data.kpiMetrics.kgi.sessionAchievementRate >= 80 &&
+                    data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30 && (
+                    <div className="border-l-4 border-green-600 bg-green-50 p-4 rounded">
+                      <div className="flex items-start gap-3">
+                        <span className="text-xl">✅</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-green-900 mb-1">すべて順調です！</p>
+                          <p className="text-sm text-green-700 mb-2">
+                            主要KPIが目標を達成しています
+                          </p>
+                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                            <p className="font-bold text-green-800">さらなる改善施策:</p>
+                            <p>1. コンバージョン率2.0%以上を目指してフォーム最適化</p>
+                            <p>2. LLM流入をさらに増やすためのFAQコンテンツ追加</p>
+                            <p>3. リピーターを増やすためのメルマガ・SNS運用強化</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+            </div>
 
               {/* Important Keywords Ranking */}
               <div className="bg-white rounded-lg shadow-sm p-6">
@@ -645,6 +704,180 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
         )}
+
+        {/* Keyword Ranking Section */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Search className="w-6 h-6" />
+            キーワード検索順位
+          </h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 入力エリア */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3">
+                順位データ入力
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                <a
+                  href="https://checker.search-rank-check.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  検索順位チェッカー
+                </a>
+                の結果をコピーして貼り付けてください
+              </p>
+
+              <textarea
+                value={pastedData}
+                onChange={(e) => setPastedData(e.target.value)}
+                placeholder="ゆめスタ    1    4240000    1    4610000    圏外    圏外    -    -    -
+ゆめマガ    1    2980000    1    2960000    圏外    圏外    -    -    -"
+                className="w-full h-48 border border-gray-300 rounded-md p-3 text-sm font-mono"
+                disabled={savingRanks}
+              />
+
+              {rankError && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                  <p className="text-sm text-red-800">{rankError}</p>
+                </div>
+              )}
+
+              {rankSuccess && (
+                <div className="mt-3 bg-green-50 border border-green-200 rounded p-3">
+                  <p className="text-sm text-green-800">{rankSuccess}</p>
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveRanks}
+                disabled={savingRanks || !pastedData.trim()}
+                className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {savingRanks ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  '保存してスプレッドシートに記録'
+                )}
+              </button>
+            </div>
+
+            {/* 表示エリア */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-gray-900">
+                  登録済みキーワード順位
+                </h3>
+                <button
+                  onClick={fetchKeywordRanks}
+                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  更新
+                </button>
+              </div>
+
+              {keywordRanks.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">まだデータがありません</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">
+                          キーワード
+                        </th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-700">
+                          Google
+                        </th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-700">
+                          Yahoo
+                        </th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-700">
+                          Bing
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {keywordRanks.map((rank, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-900">
+                            {rank.keyword}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {rank.googleRank ? (
+                              <span
+                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                                  rank.googleRank <= 3
+                                    ? 'bg-green-100 text-green-800'
+                                    : rank.googleRank <= 10
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                {rank.googleRank}位
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">圏外</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {rank.yahooRank ? (
+                              <span
+                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                                  rank.yahooRank <= 3
+                                    ? 'bg-green-100 text-green-800'
+                                    : rank.yahooRank <= 10
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                {rank.yahooRank}位
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">圏外</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {rank.bingRank ? (
+                              <span
+                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                                  rank.bingRank <= 3
+                                    ? 'bg-green-100 text-green-800'
+                                    : rank.bingRank <= 10
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                {rank.bingRank}位
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">圏外</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {keywordRanks.length > 0 && keywordRanks[0].updatedAt && (
+                    <p className="text-xs text-gray-500 mt-3 text-right">
+                      最終更新: {new Date(keywordRanks[0].updatedAt).toLocaleString('ja-JP')}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Google Analytics Section */}
         {data?.googleAnalytics && (
