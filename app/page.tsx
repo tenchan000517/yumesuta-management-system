@@ -19,12 +19,7 @@ import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
 
 interface DashboardSummary {
-  sales: {
-    totalContracts: number;
-    targetContracts: number;
-    totalPayments: number;
-    delayedCount: number;
-  } | null;
+  sales: any | null; // 営業KPI全データ
   yumemaga: {
     currentIssue: string;
     inProgressCount: number;
@@ -95,12 +90,7 @@ export default function Home() {
 
       // サマリーデータを整形
       setSummary({
-        sales: salesData.success ? {
-          totalContracts: salesData.data?.kpi?.metrics?.contracts?.actual || 0,
-          targetContracts: salesData.data?.kpi?.metrics?.contracts?.monthlyTarget || 0,
-          totalPayments: 0, // 現在のAPIには入金データがないため0
-          delayedCount: Object.values(salesData.data?.kpi?.metrics || {}).filter((m: any) => m.status === 'warning' || m.status === 'danger')?.length || 0,
-        } : null,
+        sales: salesData.success ? salesData.data : null,
         yumemaga: yumemagaData.success ? {
           currentIssue: yumemagaData.data?.issueNumber || '未設定',
           inProgressCount: yumemagaData.data?.progressSummary?.inProgress || 0,
@@ -123,7 +113,7 @@ export default function Home() {
           ],
         } : null,
         analytics: analyticsData.success ? {
-          monthlyUsers: analyticsData.data?.googleAnalytics?.summary?.activeUsers || 0,
+          monthlyUsers: analyticsData.data?.googleAnalytics?.metrics?.activeUsers || 0,
           searchRankingChange: 0, // Analytics未実装
         } : null,
         sns: snsData.success ? {
@@ -286,24 +276,135 @@ export default function Home() {
                 </Link>
               </div>
               {summary.sales ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">契約件数</span>
-                    <span className="font-semibold">{summary.sales.totalContracts} / {summary.sales.targetContracts}件</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">入金件数</span>
-                    <span className="font-semibold">{summary.sales.totalPayments}件</span>
-                  </div>
-                  {summary.sales.delayedCount > 0 && (
-                    <div className="flex justify-between items-center text-red-600">
-                      <span className="flex items-center gap-1">
-                        <AlertTriangle className="w-4 h-4" />
-                        遅延
-                      </span>
-                      <span className="font-semibold">{summary.sales.delayedCount}件</span>
+                <div className="space-y-6">
+                  {/* 商談予定カレンダー */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">商談予定カレンダー（{summary.sales.kpi.month}月）</h4>
+                    <div className="grid grid-cols-5 gap-2 mb-3">
+                      {summary.sales.customerStats.weeklyMeetings.slice(0, 5).map((week: any, index: number) => (
+                        <div key={index} className={`p-3 rounded-lg border-2 ${week.count > 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <p className="text-xs text-gray-600 mb-1">{week.weekLabel}</p>
+                          <p className={`text-xl font-bold ${week.count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>{week.count}件</p>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* 報告待ち */}
+                      <div className="p-3 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+                        <p className="text-xs font-semibold text-gray-700 mb-1">報告待ち</p>
+                        <p className="text-2xl font-bold text-yellow-600">{summary.sales.customerStats.awaitingReport}件</p>
+                      </div>
+
+                      {/* ステータス別 */}
+                      <div className="p-3 bg-gray-50 rounded-lg border-2 border-gray-200">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">ステータス別件数</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">初回商談待ち:</span>
+                            <span className="font-bold text-gray-900">{summary.sales.customerStats.statusCounts.initialMeeting}件</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">返事待ち:</span>
+                            <span className="font-bold text-gray-900">{summary.sales.customerStats.statusCounts.awaitingResponse}件</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">商談中:</span>
+                            <span className="font-bold text-gray-900">{summary.sales.customerStats.statusCounts.inNegotiation}件</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 行動量ステータス */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">行動量の日次進捗（今日時点で足りてる？）</h4>
+                    <div className="grid grid-cols-5 gap-2">
+                      {Object.entries(summary.sales.kpi.metrics).map(([key, metric]: [string, any]) => {
+                        const labels: Record<string, string> = {
+                          telAppointments: 'テレアポ件数',
+                          appointments: 'アポ獲得数',
+                          meetings: '商談件数',
+                          closings: 'クロージング数',
+                          contracts: '契約件数',
+                        };
+                        return (
+                          <div key={key} className={`p-2 rounded-lg border-2 ${metric.status === 'ok' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                            <p className="text-xs font-semibold text-gray-700 mb-1">{labels[key as keyof typeof labels]}</p>
+                            <div className="space-y-0.5 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">月間目標:</span>
+                                <span className="font-semibold">{metric.monthlyTarget}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">必要:</span>
+                                <span className="font-semibold">{metric.requiredToday}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">実績:</span>
+                                <span className="font-bold text-blue-600">{metric.actual}</span>
+                              </div>
+                              <div className="flex justify-between border-t pt-0.5">
+                                <span className="text-gray-600">過不足:</span>
+                                <span className={`font-bold ${metric.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {metric.gap >= 0 ? '+' : ''}{metric.gap}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-center">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${metric.status === 'ok' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+                                {metric.status === 'ok' ? '✅順調' : '⚠遅延'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ゆめマガ配布状況 */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">ゆめマガ配布状況</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.entries(summary.sales.magazineDistribution).map(([key, metric]: [string, any]) => {
+                        const labels: Record<string, string> = {
+                          availableSchools: '配布可能校',
+                          distributedSchools: '配布学校数',
+                          distributedCopies: '配布部数',
+                        };
+                        return (
+                          <div key={key} className={`p-2 rounded-lg border-2 ${metric.status === 'ok' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                            <p className="text-xs font-semibold text-gray-700 mb-1">{labels[key as keyof typeof labels]}</p>
+                            <div className="space-y-0.5 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">目標:</span>
+                                <span className="font-semibold">{metric.target.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">実績:</span>
+                                <span className="font-bold text-blue-600">{metric.actual.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">達成率:</span>
+                                <span className="font-semibold">{metric.achievementRate}%</span>
+                              </div>
+                              <div className="flex justify-between border-t pt-0.5">
+                                <span className="text-gray-600">過不足:</span>
+                                <span className={`font-bold ${metric.gap >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {metric.gap >= 0 ? '+' : ''}{metric.gap.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-center">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${metric.status === 'ok' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+                                {metric.status === 'ok' ? '✅達成' : '⚠未達'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <p className="text-gray-400">データを読み込んでください</p>

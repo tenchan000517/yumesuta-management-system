@@ -26,6 +26,27 @@ npm run lint
 
 The dev server uses Turbopack and runs on http://localhost:3000.
 
+## 🚨 CRITICAL: DO NOT RUN THESE COMMANDS
+
+**NEVER run the following commands under ANY circumstances:**
+
+```bash
+# ❌ ABSOLUTELY FORBIDDEN - Will kill Claude Code process
+killall -9 node
+pkill -9 node
+kill -9 <node_process_id>
+```
+
+**Why**: These commands will terminate the Claude Code process itself, causing immediate session termination.
+
+**For cache clearing**: Only use these safe commands:
+```bash
+rm -rf .next
+rm -rf node_modules/.cache
+```
+
+Then ask the user to manually restart `npm run dev`.
+
 ## Architecture
 
 ### Data Flow Pattern

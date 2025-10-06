@@ -37,7 +37,7 @@ export function getGoogleSheetsClient() {
     // Google認証クライアントを作成
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
     // Google Sheets APIクライアントを作成
@@ -116,6 +116,36 @@ export async function getSpreadsheetMetadata(spreadsheetId: string) {
     return response.data;
   } catch (error) {
     console.error('Failed to fetch spreadsheet metadata:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update sheet data (overwrite)
+ * @param spreadsheetId - The spreadsheet ID
+ * @param range - The range to update (e.g., 'Sheet1!A1:D10')
+ * @param values - 2D array of values to write
+ */
+export async function updateSheetData(
+  spreadsheetId: string,
+  range: string,
+  values: any[][]
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values,
+      },
+    });
+
+    console.log(`✅ Updated ${values.length} rows in ${range}`);
+  } catch (error) {
+    console.error('Failed to update sheet data:', error);
     throw error;
   }
 }

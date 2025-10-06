@@ -7,6 +7,9 @@ import {
   getAnalyticsMetrics,
   getTopPages as getGATopPages,
   getTrafficSources,
+  getLLMTraffic,
+  getSearchEngineTraffic,
+  getConversionEvents,
 } from '@/lib/google-analytics';
 import {
   getSearchPerformance,
@@ -14,7 +17,108 @@ import {
   getTopSearchPages,
 } from '@/lib/search-console';
 import { getClarityMetrics } from '@/lib/microsoft-clarity';
-import { AnalyticsData } from '@/types/analytics';
+import { getBatchSearchRanks } from '@/lib/google-custom-search';
+import { IMPORTANT_KEYWORDS } from '@/lib/search-console';
+import { AnalyticsData, SEOKPIMetrics } from '@/types/analytics';
+
+/**
+ * KPI計算ロジック: ブランドワード vs 一般ワード比率
+ */
+function calculateBrandKeywordRatio(topQueries: any[]): SEOKPIMetrics['brandKeywordRatio'] {
+  const brandKeywords = [
+    'ゆめスタ', 'ゆめすた', 'ユメスタ', '夢スタ', 'yumesuta',
+    'ゆめマガ', 'ゆめまが', 'ユメマガ', '夢マガ', 'yumemaga'
+  ];
+
+  let brandClicks = 0;
+  let nonBrandClicks = 0;
+
+  topQueries.forEach(query => {
+    const isBrand = brandKeywords.some(brand =>
+      query.query.toLowerCase().includes(brand.toLowerCase())
+    );
+
+    if (isBrand) {
+      brandClicks += query.clicks;
+    } else {
+      nonBrandClicks += query.clicks;
+    }
+  });
+
+  const totalClicks = brandClicks + nonBrandClicks;
+  const brandPercentage = totalClicks > 0 ? (brandClicks / totalClicks) * 100 : 0;
+  const nonBrandPercentage = totalClicks > 0 ? (nonBrandClicks / totalClicks) * 100 : 0;
+
+  return {
+    brandClicks,
+    nonBrandClicks,
+    totalClicks,
+    brandPercentage,
+    nonBrandPercentage,
+  };
+}
+
+/**
+ * KPI計算ロジック: 重要キーワード抽出
+ */
+function extractTargetKeywords(topQueries: any[]): SEOKPIMetrics['targetKeywords'] {
+  const targetKeywordPatterns = [
+    '高卒採用',
+    '就活情報誌',
+    '高校生 就活',
+    '高校生 就職',
+    '愛知 高校生',
+    '三重 高校生',
+  ];
+
+  return topQueries
+    .filter(query =>
+      targetKeywordPatterns.some(pattern =>
+        query.query.toLowerCase().includes(pattern.toLowerCase())
+      )
+    )
+    .map(query => ({
+      keyword: query.query,
+      position: query.position,
+      clicks: query.clicks,
+      impressions: query.impressions,
+      ctr: query.ctr,
+    }))
+    .slice(0, 5); // 最大5件
+}
+
+/**
+ * KPI計算ロジック: LLM流入状況
+ */
+function calculateLLMStatus(llmTraffic: any): SEOKPIMetrics['llmStatus'] {
+  const breakdown = llmTraffic?.breakdown || [];
+
+  const perplexity = breakdown.find((s: any) => s.source.includes('perplexity'));
+  const chatgpt = breakdown.find((s: any) =>
+    s.source.includes('chatgpt') || s.source.includes('chat.openai') || s.source.includes('chat.com')
+  );
+  const gemini = breakdown.find((s: any) =>
+    s.source.includes('gemini') || s.source.includes('ai.com') || s.source.includes('bard')
+  );
+  const claude = breakdown.find((s: any) => s.source.includes('claude'));
+
+  const knownSessions =
+    (perplexity?.sessions || 0) +
+    (chatgpt?.sessions || 0) +
+    (gemini?.sessions || 0) +
+    (claude?.sessions || 0);
+
+  const otherSessions = (llmTraffic?.totalSessions || 0) - knownSessions;
+
+  return {
+    totalSessions: llmTraffic?.totalSessions || 0,
+    perplexitySessions: perplexity?.sessions || 0,
+    chatGPTSessions: chatgpt?.sessions || 0,
+    geminiSessions: gemini?.sessions || 0,
+    claudeSessions: claude?.sessions || 0,
+    otherSessions: otherSessions > 0 ? otherSessions : 0,
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -41,16 +145,20 @@ export async function GET(request: Request) {
       const gaPropertyId = process.env.GA_PROPERTY_ID;
 
       if (gaPropertyId) {
-        const [metrics, topPages, trafficSources] = await Promise.all([
+        const [metrics, topPages, trafficSources, llmTraffic, searchEngineTraffic] = await Promise.all([
           getAnalyticsMetrics(gaPropertyId, `${days}daysAgo`, 'today'),
           getGATopPages(gaPropertyId, `${days}daysAgo`, 'today', 10),
           getTrafficSources(gaPropertyId, `${days}daysAgo`, 'today', 10),
+          getLLMTraffic(gaPropertyId, startDateStr, endDateStr),
+          getSearchEngineTraffic(gaPropertyId, startDateStr, endDateStr),
         ]);
 
         analyticsData.googleAnalytics = {
           metrics,
           topPages,
           trafficSources,
+          llmTraffic,
+          searchEngineTraffic,
         };
       }
     } catch (error) {
@@ -63,6 +171,38 @@ export async function GET(request: Request) {
       const siteUrl = process.env.SEARCH_CONSOLE_SITE_URL;
 
       if (siteUrl) {
+        // Calculate previous period dates for trend comparison
+        const previousEndDate = new Date(startDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        const previousStartDate = new Date(previousEndDate);
+        previousStartDate.setDate(previousStartDate.getDate() - days);
+
+        const previousStartDateStr = previousStartDate.toISOString().split('T')[0];
+        const previousEndDateStr = previousEndDate.toISOString().split('T')[0];
+
+        // Custom Search APIで重要キーワードの順位を取得（Sheetsキャッシュ使用）
+        const targetDomain = siteUrl.replace('sc-domain:', ''); // "sc-domain:yumesuta.com" → "yumesuta.com"
+        const keywords = IMPORTANT_KEYWORDS.map(k => k.keyword);
+        const tasksSpreadsheetId = process.env.TASKS_SPREADSHEET_ID!;
+        const searchRanks = await getBatchSearchRanks(keywords, targetDomain, tasksSpreadsheetId);
+
+        // KeywordRanking型に変換
+        const keywordRankings = searchRanks.map((rank, index) => {
+          const keywordDef = IMPORTANT_KEYWORDS[index];
+          return {
+            keyword: rank.keyword,
+            position: rank.position,
+            previousPosition: undefined, // TODO: 前回データと比較
+            change: undefined,
+            trend: 'new' as const,
+            clicks: 0, // Custom Search APIでは取得不可
+            impressions: rank.found ? 1 : 0, // 見つかったかどうかのフラグとして使用
+            ctr: 0,
+            priority: keywordDef.priority,
+            targetPosition: keywordDef.targetPosition,
+          };
+        });
+
         const [metrics, topQueries, topPages] = await Promise.all([
           getSearchPerformance(siteUrl, startDateStr, endDateStr),
           getTopQueries(siteUrl, startDateStr, endDateStr, 10),
@@ -73,6 +213,7 @@ export async function GET(request: Request) {
           metrics,
           topQueries,
           topPages,
+          keywordRankings,
         };
       }
     } catch (error) {
@@ -100,6 +241,71 @@ export async function GET(request: Request) {
     } catch (error) {
       console.error('Microsoft Clarity API error:', error);
       // Continue even if Clarity fails
+    }
+
+    // Calculate KPI metrics
+    if (analyticsData.searchConsole && analyticsData.googleAnalytics) {
+      const brandKeywordRatio = calculateBrandKeywordRatio(
+        analyticsData.searchConsole.topQueries
+      );
+
+      const targetKeywords = extractTargetKeywords(
+        analyticsData.searchConsole.topQueries
+      );
+
+      const llmStatus = calculateLLMStatus(analyticsData.googleAnalytics.llmTraffic);
+
+      // KGI targets (基準: 月間30日)
+      const baseTargetSessions = 500; // 月間目標セッション数
+      const baseTargetInquiries = 10; // 月間目標お問い合わせ数
+      const targetConversionRate = 2.0; // 目標CV率 (%)
+
+      // 期間に応じて目標値を按分 (days変数を使用)
+      const targetSessions = Math.round((baseTargetSessions / 30) * days);
+      const targetInquiries = Math.round((baseTargetInquiries / 30) * days);
+
+      // 現在の実績
+      const currentSessions = analyticsData.googleAnalytics.metrics.sessions;
+
+      // お問い合わせ数をGA4イベントから取得
+      // イベント名は環境変数で設定可能（デフォルト: generate_lead）
+      const gaPropertyId = process.env.GA_PROPERTY_ID;
+      const conversionEventName = process.env.GA4_CONVERSION_EVENT_NAME || 'generate_lead';
+      let currentInquiries = 0;
+      if (gaPropertyId) {
+        try {
+          currentInquiries = await getConversionEvents(
+            gaPropertyId,
+            conversionEventName,
+            startDateStr,
+            endDateStr
+          );
+        } catch (error) {
+          console.error('Failed to fetch conversion events:', error);
+          // エラーの場合は0件として扱う
+          currentInquiries = 0;
+        }
+      }
+
+      const currentConversionRate = currentSessions > 0
+        ? (currentInquiries / currentSessions) * 100
+        : 0;
+
+      analyticsData.kpiMetrics = {
+        brandKeywordRatio,
+        targetKeywords,
+        llmStatus,
+        kgi: {
+          sessions: currentSessions,
+          targetSessions,
+          sessionAchievementRate: (currentSessions / targetSessions) * 100,
+          inquiries: currentInquiries,
+          targetInquiries,
+          inquiryAchievementRate: (currentInquiries / targetInquiries) * 100,
+          conversionRate: currentConversionRate,
+          targetConversionRate,
+        },
+      };
     }
 
     return NextResponse.json({

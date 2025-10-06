@@ -2,8 +2,50 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Home, RefreshCw, Calendar, Target, TrendingUp, BookOpen, ArrowLeft } from 'lucide-react';
+import { Home, RefreshCw, Calendar, BarChart2, TrendingUp, BookOpen, ArrowLeft, DollarSign, Users } from 'lucide-react';
 import type { SalesKPIResponse } from '@/types/sales';
+
+// 転換率カードのレンダリング関数
+function renderConversionRateCard(
+  title: string,
+  data: { actualRate: number; expectedRate: number; gap: number; status: 'ok' | 'warning' }
+) {
+  return (
+    <div
+      className={`p-4 rounded-lg border-2 ${
+        data.status === 'ok' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+      }`}
+    >
+      <p className="text-sm font-semibold text-gray-700 mb-3">{title}</p>
+      <div className="grid grid-cols-3 gap-2 text-center text-sm">
+        <div>
+          <p className="text-xs text-gray-600 mb-1">実績</p>
+          <p className="text-xl font-bold text-blue-600">{data.actualRate}%</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-600 mb-1">想定</p>
+          <p className="text-xl font-bold text-gray-700">{data.expectedRate}%</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-600 mb-1">差分</p>
+          <p className={`text-xl font-bold ${data.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {data.gap >= 0 ? '+' : ''}
+            {data.gap}%
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 text-center">
+        <span
+          className={`text-xs font-semibold px-3 py-1 rounded ${
+            data.status === 'ok' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+          }`}
+        >
+          {data.status === 'ok' ? '✅想定通り' : '⚠想定以下'}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function SalesDashboardPage() {
   const [kpiData, setKpiData] = useState<SalesKPIResponse | null>(null);
@@ -71,7 +113,7 @@ export default function SalesDashboardPage() {
     );
   }
 
-  const { kpi, magazineDistribution, updatedAt } = kpiData.data;
+  const { kpi, magazineDistribution, monthlyPerformance, customerStats, updatedAt } = kpiData.data;
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -115,6 +157,103 @@ export default function SalesDashboardPage() {
           </p>
         </div>
 
+        {/* 月次予実サマリー */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-6 h-6" />
+            月次予実サマリー
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 契約件数 */}
+            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">契約件数</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">目標:</span>
+                  <span className="font-semibold">{monthlyPerformance.contractTarget}件</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">実績:</span>
+                  <span className="font-bold text-blue-600">{monthlyPerformance.contractActual}件</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">達成率:</span>
+                  <span className="font-semibold">
+                    {monthlyPerformance.contractTarget > 0
+                      ? Math.round((monthlyPerformance.contractActual / monthlyPerformance.contractTarget) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-1">
+                  <span className="text-gray-600">過不足:</span>
+                  <span className={`font-bold ${monthlyPerformance.contractGap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {monthlyPerformance.contractGap >= 0 ? '+' : ''}
+                    {monthlyPerformance.contractGap}件
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 売上 */}
+            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">売上</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">目標:</span>
+                  <span className="font-semibold">¥{monthlyPerformance.revenueTarget.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">実績:</span>
+                  <span className="font-bold text-blue-600">¥{monthlyPerformance.revenueActual.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">達成率:</span>
+                  <span className="font-semibold">
+                    {monthlyPerformance.revenueTarget > 0
+                      ? Math.round((monthlyPerformance.revenueActual / monthlyPerformance.revenueTarget) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-1">
+                  <span className="text-gray-600">過不足:</span>
+                  <span className={`font-bold ${monthlyPerformance.revenueGap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {monthlyPerformance.revenueGap >= 0 ? '+' : ''}¥{Math.abs(monthlyPerformance.revenueGap).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 入金状況 */}
+            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">入金状況</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">目標:</span>
+                  <span className="font-semibold">¥{monthlyPerformance.paymentTarget.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">実績:</span>
+                  <span className="font-bold text-blue-600">¥{monthlyPerformance.paymentActual.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">達成率:</span>
+                  <span className="font-semibold">
+                    {monthlyPerformance.paymentTarget > 0
+                      ? Math.round((monthlyPerformance.paymentActual / monthlyPerformance.paymentTarget) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-1">
+                  <span className="text-gray-600">未入金:</span>
+                  <span className={`font-bold ${monthlyPerformance.unpaidAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    ¥{monthlyPerformance.unpaidAmount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 営業日の進捗状況 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -143,10 +282,67 @@ export default function SalesDashboardPage() {
           </div>
         </div>
 
+        {/* 商談予定カレンダー（週別） */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Users className="w-6 h-6" />
+            商談予定カレンダー（{kpi.month}月）
+          </h2>
+
+          {/* 週別商談予定 */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-700 mb-3">週別商談予定</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              {customerStats.weeklyMeetings.map((week, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg border-2 ${
+                    week.count > 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <p className="text-xs text-gray-600 mb-1">{week.weekLabel}</p>
+                  <p className={`text-2xl font-bold ${week.count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {week.count}件
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 報告待ち・ステータス別 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 報告待ち */}
+            <div className="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">報告待ち</p>
+              <p className="text-3xl font-bold text-yellow-600">{customerStats.awaitingReport}件</p>
+              <p className="text-xs text-gray-600 mt-1">過去1ヶ月以内の商談</p>
+            </div>
+
+            {/* ステータス別 */}
+            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">ステータス別件数</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">初回商談待ち:</span>
+                  <span className="font-bold text-gray-900">{customerStats.statusCounts.initialMeeting}件</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">返事待ち:</span>
+                  <span className="font-bold text-gray-900">{customerStats.statusCounts.awaitingResponse}件</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">商談中:</span>
+                  <span className="font-bold text-gray-900">{customerStats.statusCounts.inNegotiation}件</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 行動量の日次進捗 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Target className="w-6 h-6" />
+            <BarChart2 className="w-6 h-6" />
             行動量の日次進捗（今日時点で足りてる？）
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -219,58 +415,27 @@ export default function SalesDashboardPage() {
             <TrendingUp className="w-6 h-6" />
             転換率の検証（ツールや営業手法に問題ない？）
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-            <div
-              className={`p-6 rounded-lg border-2 ${
-                kpi.conversionRates.appointmentRate.status === 'ok'
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-red-50 border-red-200'
-              }`}
-            >
-              <p className="text-lg font-semibold text-gray-700 mb-4">
-                アポ獲得率（テレアポ→アポ）
-              </p>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">実績転換率</p>
-                  <p className="text-3xl font-bold text-blue-600">
-                    {kpi.conversionRates.appointmentRate.actualRate}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">想定転換率</p>
-                  <p className="text-3xl font-bold text-gray-700">
-                    {kpi.conversionRates.appointmentRate.expectedRate}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">差分</p>
-                  <p
-                    className={`text-3xl font-bold ${
-                      kpi.conversionRates.appointmentRate.gap >= 0
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {kpi.conversionRates.appointmentRate.gap >= 0 ? '+' : ''}
-                    {kpi.conversionRates.appointmentRate.gap}%
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 text-center">
-                <span
-                  className={`text-sm font-semibold px-4 py-2 rounded ${
-                    kpi.conversionRates.appointmentRate.status === 'ok'
-                      ? 'bg-green-200 text-green-800'
-                      : 'bg-red-200 text-red-800'
-                  }`}
-                >
-                  {kpi.conversionRates.appointmentRate.status === 'ok'
-                    ? '✅想定通り'
-                    : '⚠想定以下'}
-                </span>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* アポ獲得率 */}
+            {renderConversionRateCard(
+              'アポ獲得率（テレアポ→アポ）',
+              kpi.conversionRates.appointmentRate
+            )}
+            {/* 商談率 */}
+            {renderConversionRateCard(
+              '商談率（アポ→商談）',
+              kpi.conversionRates.meetingRate
+            )}
+            {/* クロージング率 */}
+            {renderConversionRateCard(
+              'クロージング率（商談→クロージング）',
+              kpi.conversionRates.closingRate
+            )}
+            {/* 契約率 */}
+            {renderConversionRateCard(
+              '契約率（クロージング→契約）',
+              kpi.conversionRates.contractRate
+            )}
           </div>
         </div>
 
