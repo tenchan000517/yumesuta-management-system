@@ -27,6 +27,16 @@ interface KeywordRankData {
   updatedAt: string;
 }
 
+interface DomainPowerData {
+  domain: string;
+  domainRating: number;
+  backlinks: number;
+  dofollowPercentage: number;
+  linkingWebsites: number;
+  linkingWebsitesDofollow: number;
+  updatedAt: string;
+}
+
 export default function AnalyticsDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +50,21 @@ export default function AnalyticsDashboard() {
   const [rankError, setRankError] = useState<string | null>(null);
   const [rankSuccess, setRankSuccess] = useState<string | null>(null);
   const [showInputForm, setShowInputForm] = useState(false);
+
+  // ドメインパワー関連のstate
+  const [domainPower, setDomainPower] = useState<DomainPowerData | null>(null);
+  const [domainInput, setDomainInput] = useState({
+    domain: 'yumesuta.com',
+    domainRating: '',
+    backlinks: '',
+    dofollowPercentage: '',
+    linkingWebsites: '',
+    linkingWebsitesDofollow: '',
+  });
+  const [savingDomain, setSavingDomain] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainSuccess, setDomainSuccess] = useState<string | null>(null);
+  const [showDomainForm, setShowDomainForm] = useState(false);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -108,10 +133,60 @@ export default function AnalyticsDashboard() {
     }
   };
 
+  // ドメインパワーを取得
+  const fetchDomainPower = async () => {
+    try {
+      const res = await fetch('/api/domain-power');
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDomainPower(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch domain power:', err);
+    }
+  };
+
+  // ドメインパワーを保存
+  const handleSaveDomain = async () => {
+    setSavingDomain(true);
+    setDomainError(null);
+    setDomainSuccess(null);
+
+    try {
+      const res = await fetch('/api/domain-power', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: domainInput.domain,
+          domainRating: parseFloat(domainInput.domainRating) || 0,
+          backlinks: parseInt(domainInput.backlinks) || 0,
+          dofollowPercentage: parseFloat(domainInput.dofollowPercentage) || 0,
+          linkingWebsites: parseInt(domainInput.linkingWebsites) || 0,
+          linkingWebsitesDofollow: parseFloat(domainInput.linkingWebsitesDofollow) || 0,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setDomainSuccess(json.message);
+        setShowDomainForm(false);
+        await fetchDomainPower(); // データを再取得
+      } else {
+        setDomainError(json.error);
+      }
+    } catch (err: any) {
+      setDomainError(err.message || '保存に失敗しました');
+    } finally {
+      setSavingDomain(false);
+    }
+  };
+
   // 初回マウント時に自動でデータ取得
   useEffect(() => {
     handleRefresh();
     fetchKeywordRanks();
+    fetchDomainPower();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -876,6 +951,279 @@ export default function AnalyticsDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Domain Power Section */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-6 h-6" />
+            ドメインパワー (yumesuta.com)
+          </h2>
+
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            {domainPower ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                  {/* ドメイン評価 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                    <p className="text-xs text-blue-700 mb-1 font-medium">ドメイン評価</p>
+                    <p className="text-3xl font-bold text-blue-900">{domainPower.domainRating.toFixed(1)}</p>
+                  </div>
+
+                  {/* 被リンク数 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+                    <p className="text-xs text-green-700 mb-1 font-medium">被リンク数</p>
+                    <p className="text-3xl font-bold text-green-900">{formatNumber(domainPower.backlinks)}</p>
+                  </div>
+
+                  {/* Dofollow率 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
+                    <p className="text-xs text-purple-700 mb-1 font-medium">Dofollow率</p>
+                    <p className="text-3xl font-bold text-purple-900">{domainPower.dofollowPercentage.toFixed(0)}%</p>
+                  </div>
+
+                  {/* リンク元サイト数 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
+                    <p className="text-xs text-orange-700 mb-1 font-medium">リンク元サイト</p>
+                    <p className="text-3xl font-bold text-orange-900">{formatNumber(domainPower.linkingWebsites)}</p>
+                  </div>
+
+                  {/* Dofollowサイト率 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg">
+                    <p className="text-xs text-pink-700 mb-1 font-medium">Dofollowサイト率</p>
+                    <p className="text-3xl font-bold text-pink-900">{domainPower.linkingWebsitesDofollow.toFixed(0)}%</p>
+                  </div>
+
+                  {/* 最終更新 */}
+                  <div className="text-center p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg">
+                    <p className="text-xs text-gray-700 mb-1 font-medium">最終更新</p>
+                    <p className="text-sm font-bold text-gray-900">
+                      {new Date(domainPower.updatedAt).toLocaleDateString('ja-JP')}
+                    </p>
+                  </div>
+                </div>
+
+                {domainSuccess && (
+                  <div className="mb-4 bg-green-50 border border-green-200 rounded p-3">
+                    <p className="text-sm text-green-800">{domainSuccess}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setShowDomainForm(!showDomainForm)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  {showDomainForm ? '入力欄を閉じる' : 'データを更新'}
+                </button>
+
+                {showDomainForm && (
+                  <div className="mt-4 border-t pt-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3">
+                      最新データを入力してください
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          ドメイン評価
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.domainRating}
+                          onChange={(e) => setDomainInput({ ...domainInput, domainRating: e.target.value })}
+                          placeholder="2.8"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          被リンク数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.backlinks}
+                          onChange={(e) => setDomainInput({ ...domainInput, backlinks: e.target.value })}
+                          placeholder="47"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollow率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.dofollowPercentage}
+                          onChange={(e) => setDomainInput({ ...domainInput, dofollowPercentage: e.target.value })}
+                          placeholder="34"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          リンク元サイト数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.linkingWebsites}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsites: e.target.value })}
+                          placeholder="12"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollowサイト率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.linkingWebsitesDofollow}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsitesDofollow: e.target.value })}
+                          placeholder="33"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {domainError && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-sm text-red-800">{domainError}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleSaveDomain}
+                      disabled={savingDomain}
+                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingDomain ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存'
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30 text-gray-400" />
+                <p className="text-sm text-gray-500 mb-4">まだデータがありません</p>
+                <button
+                  onClick={() => setShowDomainForm(true)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                >
+                  初回データを入力
+                </button>
+
+                {showDomainForm && (
+                  <div className="mt-6 text-left max-w-2xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          ドメイン評価
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.domainRating}
+                          onChange={(e) => setDomainInput({ ...domainInput, domainRating: e.target.value })}
+                          placeholder="2.8"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          被リンク数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.backlinks}
+                          onChange={(e) => setDomainInput({ ...domainInput, backlinks: e.target.value })}
+                          placeholder="47"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollow率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.dofollowPercentage}
+                          onChange={(e) => setDomainInput({ ...domainInput, dofollowPercentage: e.target.value })}
+                          placeholder="34"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          リンク元サイト数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.linkingWebsites}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsites: e.target.value })}
+                          placeholder="12"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollowサイト率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.linkingWebsitesDofollow}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsitesDofollow: e.target.value })}
+                          placeholder="33"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {domainError && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-sm text-red-800">{domainError}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleSaveDomain}
+                      disabled={savingDomain}
+                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingDomain ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存'
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
