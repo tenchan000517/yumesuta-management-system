@@ -24,6 +24,9 @@ interface KeywordRankData {
   googleHits: number | null;
   yahooHits: number | null;
   bingHits: number | null;
+  googleMobileRank: number | null;
+  yahooMobileRank: number | null;
+  bingMobileRank: number | null;
   updatedAt: string;
 }
 
@@ -50,6 +53,7 @@ export default function AnalyticsDashboard() {
   const [rankError, setRankError] = useState<string | null>(null);
   const [rankSuccess, setRankSuccess] = useState<string | null>(null);
   const [showInputForm, setShowInputForm] = useState(false);
+  const [showAllRanks, setShowAllRanks] = useState(false);
 
   // ドメインパワー関連のstate
   const [domainPower, setDomainPower] = useState<DomainPowerData | null>(null);
@@ -280,7 +284,7 @@ export default function AnalyticsDashboard() {
             {/* KGI Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               {/* セッション数 KGI */}
-              <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-600">
+              <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase">KGI</p>
@@ -305,25 +309,23 @@ export default function AnalyticsDashboard() {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          data.kpiMetrics.kgi.sessionAchievementRate >= 80
-                            ? 'bg-green-600'
-                            : data.kpiMetrics.kgi.sessionAchievementRate >= 50
-                            ? 'bg-yellow-600'
+                        className={`h-full rounded-full transition-all duration-300 ${data.kpiMetrics.kgi.sessionAchievementRate >= 80
+                          ? 'bg-green-600'
+                          : data.kpiMetrics.kgi.sessionAchievementRate >= 50
+                            ? 'bg-blue-600'
                             : 'bg-red-600'
-                        }`}
+                          }`}
                         style={{
                           width: `${Math.min(data.kpiMetrics.kgi.sessionAchievementRate, 100)}%`,
                         }}
                       />
                     </div>
-                    <span className={`text-sm font-bold ${
-                      data.kpiMetrics.kgi.sessionAchievementRate >= 80
-                        ? 'text-green-600'
-                        : data.kpiMetrics.kgi.sessionAchievementRate >= 50
-                        ? 'text-yellow-600'
+                    <span className={`text-sm font-bold ${data.kpiMetrics.kgi.sessionAchievementRate >= 80
+                      ? 'text-green-600'
+                      : data.kpiMetrics.kgi.sessionAchievementRate >= 50
+                        ? 'text-blue-600'
                         : 'text-red-600'
-                    }`}>
+                      }`}>
                       {data.kpiMetrics.kgi.sessionAchievementRate.toFixed(1)}%
                     </span>
                   </div>
@@ -340,7 +342,7 @@ export default function AnalyticsDashboard() {
               </div>
 
               {/* お問い合わせ数 KPI */}
-              <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-600">
+              <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase">KPI</p>
@@ -365,25 +367,23 @@ export default function AnalyticsDashboard() {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          data.kpiMetrics.kgi.inquiryAchievementRate >= 80
-                            ? 'bg-green-600'
-                            : data.kpiMetrics.kgi.inquiryAchievementRate >= 50
+                        className={`h-full rounded-full transition-all duration-300 ${data.kpiMetrics.kgi.inquiryAchievementRate >= 80
+                          ? 'bg-green-600'
+                          : data.kpiMetrics.kgi.inquiryAchievementRate >= 50
                             ? 'bg-yellow-600'
                             : 'bg-red-600'
-                        }`}
+                          }`}
                         style={{
                           width: `${Math.min(data.kpiMetrics.kgi.inquiryAchievementRate, 100)}%`,
                         }}
                       />
                     </div>
-                    <span className={`text-sm font-bold ${
-                      data.kpiMetrics.kgi.inquiryAchievementRate >= 80
-                        ? 'text-green-600'
-                        : data.kpiMetrics.kgi.inquiryAchievementRate >= 50
+                    <span className={`text-sm font-bold ${data.kpiMetrics.kgi.inquiryAchievementRate >= 80
+                      ? 'text-green-600'
+                      : data.kpiMetrics.kgi.inquiryAchievementRate >= 50
                         ? 'text-yellow-600'
                         : 'text-red-600'
-                    }`}>
+                      }`}>
                       {data.kpiMetrics.kgi.inquiryAchievementRate.toFixed(1)}%
                     </span>
                   </div>
@@ -409,7 +409,7 @@ export default function AnalyticsDashboard() {
               </div>
 
               {/* コンバージョン率 KPI */}
-              <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-purple-600">
+              <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase">KPI</p>
@@ -434,13 +434,12 @@ export default function AnalyticsDashboard() {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 80
-                            ? 'bg-green-600'
-                            : (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 50
+                        className={`h-full rounded-full transition-all duration-300 ${(data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 80
+                          ? 'bg-green-600'
+                          : (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 50
                             ? 'bg-yellow-600'
                             : 'bg-red-600'
-                        }`}
+                          }`}
                         style={{
                           width: `${Math.min(
                             (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100,
@@ -449,13 +448,12 @@ export default function AnalyticsDashboard() {
                         }}
                       />
                     </div>
-                    <span className={`text-sm font-bold ${
-                      (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 80
-                        ? 'text-green-600'
-                        : (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 50
+                    <span className={`text-sm font-bold ${(data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 80
+                      ? 'text-green-600'
+                      : (data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100 >= 50
                         ? 'text-yellow-600'
                         : 'text-red-600'
-                    }`}>
+                      }`}>
                       {((data.kpiMetrics.kgi.conversionRate / data.kpiMetrics.kgi.targetConversionRate) * 100).toFixed(1)}%
                     </span>
                   </div>
@@ -481,100 +479,592 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* KPI Details Grid */}
-            <div className="mb-8">
-              {/* LLMO対策推奨アクション */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-orange-600" />
-                  LLMO対策推奨アクション
-                </h3>
 
-                <div className="space-y-3">
+            {/* Keyword Ranking & Domain Power Section */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Search className="w-6 h-6" />
+                キーワード検索順位・ドメインパワー
+              </h2>
+
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                {/* キーワード順位表示エリア */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-900">
+                      登録済みキーワード順位
+                    </h3>
+                    <button
+                      onClick={fetchKeywordRanks}
+                      className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      更新
+                    </button>
+                  </div>
+
+                  {keywordRanks.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">まだデータがありません</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-2 py-2 text-left font-medium text-gray-700">
+                              キーワード
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Google<br />(PC)
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Google<br />(スマホ)
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Yahoo<br />(PC)
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Yahoo<br />(スマホ)
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Bing<br />(PC)
+                            </th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-700">
+                              Bing<br />(スマホ)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {(showAllRanks ? keywordRanks : keywordRanks.slice(0, 10)).map((rank, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-2 py-2 font-medium text-gray-900">
+                                {rank.keyword}
+                              </td>
+                              {/* Google PC */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.googleRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.googleRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.googleRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.googleRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">圏外</span>
+                                )}
+                              </td>
+                              {/* Google Mobile */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.googleMobileRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.googleMobileRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.googleMobileRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.googleMobileRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">-</span>
+                                )}
+                              </td>
+                              {/* Yahoo PC */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.yahooRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.yahooRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.yahooRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.yahooRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">圏外</span>
+                                )}
+                              </td>
+                              {/* Yahoo Mobile */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.yahooMobileRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.yahooMobileRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.yahooMobileRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.yahooMobileRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">-</span>
+                                )}
+                              </td>
+                              {/* Bing PC */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.bingRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.bingRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.bingRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.bingRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">圏外</span>
+                                )}
+                              </td>
+                              {/* Bing Mobile */}
+                              <td className="px-2 py-2 text-center">
+                                {rank.bingMobileRank ? (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.bingMobileRank <= 3
+                                      ? 'bg-green-100 text-green-800'
+                                      : rank.bingMobileRank <= 10
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                      }`}
+                                  >
+                                    {rank.bingMobileRank}位
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      {keywordRanks.length > 0 && keywordRanks[0].updatedAt && (
+                        <p className="text-xs text-gray-500 mt-3 text-right">
+                          最終更新: {new Date(keywordRanks[0].updatedAt).toLocaleString('ja-JP')}
+                        </p>
+                      )}
+
+                      {keywordRanks.length > 10 && (
+                        <button
+                          onClick={() => setShowAllRanks(!showAllRanks)}
+                          className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2 text-sm"
+                        >
+                          {showAllRanks ? (
+                            <>
+                              <TrendingUp className="w-4 h-4" />
+                              TOP10のみ表示
+                            </>
+                          ) : (
+                            <>
+                              <TrendingUp className="w-4 h-4" />
+                              すべてのキーワードを表示 ({keywordRanks.length}件)
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ドメインパワー表示エリア */}
+                <div className="mb-6 pb-6 border-b">
+                  <h3 className="text-lg font-bold text-gray-900 mb-3">
+                    ドメインパワー (yumesuta.com)
+                  </h3>
+
+                  {domainPower ? (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {/* ドメイン評価 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                          <p className="text-xs text-blue-700 mb-1 font-medium">ドメイン評価</p>
+                          <p className="text-3xl font-bold text-blue-900">{domainPower.domainRating.toFixed(1)}</p>
+                        </div>
+
+                        {/* 被リンク数 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+                          <p className="text-xs text-green-700 mb-1 font-medium">被リンク数</p>
+                          <p className="text-3xl font-bold text-green-900">{formatNumber(domainPower.backlinks)}</p>
+                        </div>
+
+                        {/* Dofollow率 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
+                          <p className="text-xs text-purple-700 mb-1 font-medium">Dofollow率</p>
+                          <p className="text-3xl font-bold text-purple-900">{domainPower.dofollowPercentage.toFixed(0)}%</p>
+                        </div>
+
+                        {/* リンク元サイト数 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
+                          <p className="text-xs text-orange-700 mb-1 font-medium">リンク元サイト</p>
+                          <p className="text-3xl font-bold text-orange-900">{formatNumber(domainPower.linkingWebsites)}</p>
+                        </div>
+
+                        {/* Dofollowサイト率 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg">
+                          <p className="text-xs text-pink-700 mb-1 font-medium">Dofollowサイト率</p>
+                          <p className="text-3xl font-bold text-pink-900">{domainPower.linkingWebsitesDofollow.toFixed(0)}%</p>
+                        </div>
+
+                        {/* 最終更新 */}
+                        <div className="text-center p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg">
+                          <p className="text-xs text-gray-700 mb-1 font-medium">最終更新</p>
+                          <p className="text-3xl font-bold text-gray-900">
+                            {new Date(domainPower.updatedAt).toLocaleDateString('ja-JP')}
+                          </p>
+                        </div>
+                      </div>
+
+                      {domainSuccess && (
+                        <div className="mt-4 bg-green-50 border border-green-200 rounded p-3">
+                          <p className="text-sm text-green-800">{domainSuccess}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">まだデータがありません</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* キーワード順位入力折りたたみボタン */}
+                <button
+                  onClick={() => setShowInputForm(!showInputForm)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2 mb-3"
+                >
+                  <Search className="w-4 h-4" />
+                  {showInputForm ? 'キーワード順位入力欄を閉じる' : '新しいキーワード順位を追加'}
+                </button>
+
+                {/* キーワード順位入力エリア（折りたたみ） */}
+                {showInputForm && (
+                  <div className="mb-3 border-t pt-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3">
+                      キーワード順位データ入力
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      <a
+                        href="https://checker.search-rank-check.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        検索順位チェッカー
+                      </a>
+                      の結果をコピーして貼り付けてください
+                    </p>
+
+                    <textarea
+                      value={pastedData}
+                      onChange={(e) => setPastedData(e.target.value)}
+                      placeholder="キーワード    順位    ヒット数    順位    ヒット数    順位    ヒット数    順位    順位    順位
+ゆめスタ    1    4240000    1    4610000    圏外    圏外    1    1    圏外
+ゆめマガ    2    2980000    3    2960000    圏外    圏外    2    3    圏外"
+                      className="w-full h-48 border border-gray-300 rounded-md p-3 text-sm font-mono"
+                      disabled={savingRanks}
+                    />
+
+                    {rankError && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-sm text-red-800">{rankError}</p>
+                      </div>
+                    )}
+
+                    {rankSuccess && (
+                      <div className="mt-3 bg-green-50 border border-green-200 rounded p-3">
+                        <p className="text-sm text-green-800">{rankSuccess}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleSaveRanks}
+                      disabled={savingRanks || !pastedData.trim()}
+                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingRanks ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存してスプレッドシートに記録'
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* ドメインパワー入力折りたたみボタン */}
+                <button
+                  onClick={() => setShowDomainForm(!showDomainForm)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  {showDomainForm ? 'ドメインパワー入力欄を閉じる' : 'ドメインパワーを更新'}
+                </button>
+
+                {/* ドメインパワー入力エリア（折りたたみ） */}
+                {showDomainForm && (
+                  <div className="mt-4 border-t pt-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-3">
+                      最新データを入力してください
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      <a
+                        href="https://ahrefs.com/ja/website-authority-checker/?input=yumesuta.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        Ahrefs Website Authority Checker
+                      </a>
+                      {' '}と{' '}
+                      <a
+                        href="https://ahrefs.com/ja/backlink-checker/?input=yumesuta.com&mode=subdomains"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        被リンクチェッカー
+                      </a>
+                      で最新データを確認して入力してください
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          ドメイン評価
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.domainRating}
+                          onChange={(e) => setDomainInput({ ...domainInput, domainRating: e.target.value })}
+                          placeholder="2.8"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          被リンク数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.backlinks}
+                          onChange={(e) => setDomainInput({ ...domainInput, backlinks: e.target.value })}
+                          placeholder="47"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollow率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.dofollowPercentage}
+                          onChange={(e) => setDomainInput({ ...domainInput, dofollowPercentage: e.target.value })}
+                          placeholder="34"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          リンク元サイト数
+                        </label>
+                        <input
+                          type="number"
+                          value={domainInput.linkingWebsites}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsites: e.target.value })}
+                          placeholder="12"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Dofollowサイト率 (%)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={domainInput.linkingWebsitesDofollow}
+                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsitesDofollow: e.target.value })}
+                          placeholder="33"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {domainError && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-sm text-red-800">{domainError}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleSaveDomain}
+                      disabled={savingDomain}
+                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingDomain ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存'
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* LLMO対策セクション（縦並び） */}
+            <div className="mb-8">
+              <div className="space-y-6">
+                {/* LLM流入状況 */}
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    LLMO流入状況
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-900">
+                        {formatNumber(data.kpiMetrics.llmStatus.totalSessions)}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">合計</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-purple-600">
+                        {formatNumber(data.kpiMetrics.llmStatus.perplexitySessions)}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Perplexity</p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-2xl font-bold ${data.kpiMetrics.llmStatus.chatGPTSessions > 0
+                          ? 'text-green-600'
+                          : 'text-gray-400'
+                          }`}
+                      >
+                        {formatNumber(data.kpiMetrics.llmStatus.chatGPTSessions)}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">ChatGPT</p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-2xl font-bold ${data.kpiMetrics.llmStatus.geminiSessions > 0
+                          ? 'text-green-600'
+                          : 'text-gray-400'
+                          }`}
+                      >
+                        {formatNumber(data.kpiMetrics.llmStatus.geminiSessions)}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Gemini</p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-2xl font-bold ${data.kpiMetrics.llmStatus.claudeSessions > 0
+                          ? 'text-green-600'
+                          : 'text-gray-400'
+                          }`}
+                      >
+                        {formatNumber(data.kpiMetrics.llmStatus.claudeSessions)}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">Claude</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LLMO対策推奨アクション */}
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-orange-600" />
+                    LLMO対策推奨アクション
+                  </h3>
+
+                  <div className="space-y-3">
                   {/* LLM流入ゼロの場合 */}
                   {data.kpiMetrics.llmStatus.totalSessions === 0 && (
-                    <div className="border-l-4 border-red-600 bg-red-50 p-4 rounded">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">🚨</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-red-900 mb-1">緊急: LLMからの流入がゼロです</p>
-                          <p className="text-sm text-red-700 mb-2">
-                            ChatGPT・Perplexity・Geminiなどの生成AIからのアクセスが検出されていません
-                          </p>
-                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
-                            <p className="font-bold text-red-800">推奨対策:</p>
-                            <p>1. Q&A形式のコンテンツを追加（「高校生 就職 愛知 よくある質問」など）</p>
-                            <p>2. FAQページを作成・充実化</p>
-                            <p>3. 構造化データ（Schema.org）を実装</p>
-                          </div>
-                        </div>
+                    <div className="bg-red-50 p-4 rounded">
+                      <p className="font-bold text-red-900 mb-1">緊急: LLMからの流入がゼロです</p>
+                      <p className="text-sm text-red-700 mb-2">
+                        ChatGPT・Perplexity・Geminiなどの生成AIからのアクセスが検出されていません
+                      </p>
+                      <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                        <p className="font-bold text-red-800">推奨対策:</p>
+                        <p>1. Q&A形式のコンテンツを追加（「高校生 就職 愛知 よくある質問」など）</p>
+                        <p>2. FAQページを作成・充実化</p>
+                        <p>3. 構造化データ（Schema.org）を実装</p>
                       </div>
                     </div>
                   )}
 
                   {/* お問い合わせゼロの場合 */}
                   {data.kpiMetrics.kgi.inquiries === 0 && (
-                    <div className="border-l-4 border-orange-600 bg-orange-50 p-4 rounded">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">⚠️</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-orange-900 mb-1">重要: お問い合わせがゼロです</p>
-                          <p className="text-sm text-orange-700 mb-2">
-                            過去{days}日間でコンバージョンが発生していません
-                          </p>
-                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
-                            <p className="font-bold text-orange-800">推奨対策:</p>
-                            <p>1. CTAボタンの配置・文言を見直し</p>
-                            <p>2. お問い合わせフォームを簡略化</p>
-                            <p>3. GA4イベント設定の確認（generate_leadイベントが正しく発火しているか）</p>
-                          </div>
-                        </div>
+                    <div className="bg-orange-50 p-4 rounded">
+                      <p className="font-bold text-orange-900 mb-1">重要: お問い合わせがゼロです</p>
+                      <p className="text-sm text-orange-700 mb-2">
+                        過去{days}日間でコンバージョンが発生していません
+                      </p>
+                      <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                        <p className="font-bold text-orange-800">推奨対策:</p>
+                        <p>1. CTAボタンの配置・文言を見直し</p>
+                        <p>2. お問い合わせフォームを簡略化</p>
+                        <p>3. GA4イベント設定の確認（generate_leadイベントが正しく発火しているか）</p>
                       </div>
                     </div>
                   )}
 
                   {/* セッション目標未達の場合 */}
                   {data.kpiMetrics.kgi.sessionAchievementRate < 80 && (
-                    <div className="border-l-4 border-yellow-600 bg-yellow-50 p-4 rounded">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">📊</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-yellow-900 mb-1">
-                            セッション数が目標の{data.kpiMetrics.kgi.sessionAchievementRate.toFixed(0)}%です
-                          </p>
-                          <p className="text-sm text-yellow-700 mb-2">
-                            目標まであと {formatNumber(data.kpiMetrics.kgi.targetSessions - data.kpiMetrics.kgi.sessions)} セッション
-                          </p>
-                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
-                            <p className="font-bold text-yellow-800">推奨対策:</p>
-                            <p>1. SNS投稿頻度を増やす（週3回→毎日）</p>
-                            <p>2. 検索順位の低いキーワードのコンテンツ改善</p>
-                            <p>3. 内部リンク構造の最適化</p>
-                          </div>
-                        </div>
+                    <div className="bg-yellow-50 p-4 rounded">
+                      <p className="font-bold text-yellow-900 mb-1">
+                        セッション数が目標の{data.kpiMetrics.kgi.sessionAchievementRate.toFixed(0)}%です
+                      </p>
+                      <p className="text-sm text-yellow-700 mb-2">
+                        目標まであと {formatNumber(data.kpiMetrics.kgi.targetSessions - data.kpiMetrics.kgi.sessions)} セッション
+                      </p>
+                      <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                        <p className="font-bold text-yellow-800">推奨対策:</p>
+                        <p>1. SNS投稿頻度を増やす（週3回→毎日）</p>
+                        <p>2. 検索順位の低いキーワードのコンテンツ改善</p>
+                        <p>3. 内部リンク構造の最適化</p>
                       </div>
                     </div>
                   )}
 
                   {/* 一般ワード比率が低い場合 */}
                   {data.kpiMetrics.brandKeywordRatio.nonBrandPercentage < 30 && (
-                    <div className="border-l-4 border-blue-600 bg-blue-50 p-4 rounded">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">🎯</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-blue-900 mb-1">
-                            一般ワード比率が{data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}%（目標30%）
-                          </p>
-                          <p className="text-sm text-blue-700 mb-2">
-                            ブランド名以外のキーワードからの流入を増やす必要があります
-                          </p>
-                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
-                            <p className="font-bold text-blue-800">推奨対策:</p>
-                            <p>1. 「高校生 就職 愛知」などのロングテールキーワード記事を作成</p>
-                            <p>2. 既存ページのタイトル・見出しにキーワードを追加</p>
-                            <p>3. 検索意図に合ったコンテンツの拡充</p>
-                          </div>
-                        </div>
+                    <div className="bg-blue-50 p-4 rounded">
+                      <p className="font-bold text-blue-900 mb-1">
+                        一般ワード比率が{data.kpiMetrics.brandKeywordRatio.nonBrandPercentage.toFixed(1)}%（目標30%）
+                      </p>
+                      <p className="text-sm text-blue-700 mb-2">
+                        ブランド名以外のキーワードからの流入を増やす必要があります
+                      </p>
+                      <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                        <p className="font-bold text-blue-800">推奨対策:</p>
+                        <p>1. 「高校生 就職 愛知」などのロングテールキーワード記事を作成</p>
+                        <p>2. 既存ページのタイトル・見出しにキーワードを追加</p>
+                        <p>3. 検索意図に合ったコンテンツの拡充</p>
                       </div>
                     </div>
                   )}
@@ -584,648 +1074,26 @@ export default function AnalyticsDashboard() {
                     data.kpiMetrics.kgi.inquiries > 0 &&
                     data.kpiMetrics.kgi.sessionAchievementRate >= 80 &&
                     data.kpiMetrics.brandKeywordRatio.nonBrandPercentage >= 30 && (
-                    <div className="border-l-4 border-green-600 bg-green-50 p-4 rounded">
-                      <div className="flex items-start gap-3">
-                        <span className="text-xl">✅</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-green-900 mb-1">すべて順調です！</p>
-                          <p className="text-sm text-green-700 mb-2">
-                            主要KPIが目標を達成しています
-                          </p>
-                          <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
-                            <p className="font-bold text-green-800">さらなる改善施策:</p>
-                            <p>1. コンバージョン率2.0%以上を目指してフォーム最適化</p>
-                            <p>2. LLM流入をさらに増やすためのFAQコンテンツ追加</p>
-                            <p>3. リピーターを増やすためのメルマガ・SNS運用強化</p>
-                          </div>
+                      <div className="bg-green-50 p-4 rounded">
+                        <p className="font-bold text-green-900 mb-1">すべて順調です！</p>
+                        <p className="text-sm text-green-700 mb-2">
+                          主要KPIが目標を達成しています
+                        </p>
+                        <div className="bg-white rounded p-3 text-xs text-gray-700 space-y-1">
+                          <p className="font-bold text-green-800">さらなる改善施策:</p>
+                          <p>1. コンバージョン率2.0%以上を目指してフォーム最適化</p>
+                          <p>2. LLM流入をさらに増やすためのFAQコンテンツ追加</p>
+                          <p>3. リピーターを増やすためのメルマガ・SNS運用強化</p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-              {/* Important Keywords Ranking */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    重要キーワード順位
-                  </h3>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-1">
-                    <p className="text-xs font-medium text-yellow-800">
-                      ⚠️ 24時間キャッシュ（課金防止）
-                    </p>
-                  </div>
-                </div>
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                  <p className="text-xs text-blue-800">
-                    <strong>Custom Search API使用:</strong> 更新ボタンを押すと8クエリ消費します。1日1回の更新を推奨（月間240クエリ、約$7/月）
-                  </p>
-                </div>
-                {data.searchConsole?.keywordRankings && data.searchConsole.keywordRankings.length > 0 ? (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {data.searchConsole.keywordRankings.map((kw, index) => {
-                      // メダルアイコン判定
-                      const getMedalIcon = (pos: number) => {
-                        if (pos <= 1) return '🥇';
-                        if (pos <= 2) return '🥈';
-                        if (pos <= 3) return '🥉';
-                        return null;
-                      };
-
-                      // 目標達成判定とステータス色
-                      const isAchieved = kw.position <= kw.targetPosition;
-                      const getStatusColor = () => {
-                        if (isAchieved) return 'text-green-600 bg-green-50';
-                        if (kw.position <= 10) return 'text-yellow-600 bg-yellow-50';
-                        if (kw.position <= 50) return 'text-orange-600 bg-orange-50';
-                        return 'text-red-600 bg-red-50';
-                      };
-
-                      // トレンドアイコン
-                      const getTrendIcon = (trend?: 'up' | 'down' | 'same' | 'new') => {
-                        if (trend === 'up') return '↑';
-                        if (trend === 'down') return '↓';
-                        if (trend === 'same') return '→';
-                        if (trend === 'new') return '🆕';
-                        return '';
-                      };
-
-                      const medal = getMedalIcon(kw.position);
-
-                      return (
-                        <div key={index} className={`border rounded-lg p-3 ${getStatusColor()}`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-2">
-                              {medal && <span className="text-lg">{medal}</span>}
-                              {!medal && (isAchieved ? '✅' : '❌')}
-                              <span className="text-sm font-bold text-gray-900">
-                                {kw.keyword}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {kw.trend && (
-                                <span className="text-xs font-medium">
-                                  {getTrendIcon(kw.trend)}
-                                </span>
-                              )}
-                              <span className={`text-sm font-bold ${getStatusColor().split(' ')[0]}`}>
-                                {kw.position === 999 ? 'ランク外' : `${kw.position.toFixed(1)}位`}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-between items-center text-xs">
-                            <div className="flex gap-3 text-gray-600">
-                              <span>目標: {kw.targetPosition}位</span>
-                              <span>{formatNumber(kw.clicks)} クリック</span>
-                            </div>
-                            {kw.position === 999 ? (
-                              <div className="mt-1">
-                                <span className="text-red-600 font-medium">⚠️ 10位圏外</span>
-                                <p className="text-xs text-red-500 mt-0.5">
-                                  SEO対策が必要です（コンテンツ強化・キーワード最適化）
-                                </p>
-                              </div>
-                            ) : kw.position > kw.targetPosition ? (
-                              <div className="mt-1">
-                                <span className="text-orange-600 font-medium">⚠️ 目標未達</span>
-                                <p className="text-xs text-orange-500 mt-0.5">
-                                  目標順位まであと{kw.position - kw.targetPosition}位
-                                </p>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    重要キーワードのデータがありません
-                  </p>
-                )}
-              </div>
-
-              {/* LLM Traffic Status */}
-              <div className="bg-white rounded-lg shadow-sm p-6 lg:col-span-2">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  LLM流入状況
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-gray-900">
-                      {formatNumber(data.kpiMetrics.llmStatus.totalSessions)}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">合計</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-purple-600">
-                      {formatNumber(data.kpiMetrics.llmStatus.perplexitySessions)}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">Perplexity</p>
-                    {data.kpiMetrics.llmStatus.perplexitySessions > 0 && (
-                      <span className="text-xs text-green-600">✓</span>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className={`text-2xl font-bold ${
-                        data.kpiMetrics.llmStatus.chatGPTSessions > 0
-                          ? 'text-green-600'
-                          : 'text-gray-400'
-                      }`}
-                    >
-                      {formatNumber(data.kpiMetrics.llmStatus.chatGPTSessions)}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">ChatGPT</p>
-                    {data.kpiMetrics.llmStatus.chatGPTSessions === 0 && (
-                      <span className="text-xs text-red-600">🔴</span>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className={`text-2xl font-bold ${
-                        data.kpiMetrics.llmStatus.geminiSessions > 0
-                          ? 'text-green-600'
-                          : 'text-gray-400'
-                      }`}
-                    >
-                      {formatNumber(data.kpiMetrics.llmStatus.geminiSessions)}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">Gemini</p>
-                    {data.kpiMetrics.llmStatus.geminiSessions === 0 && (
-                      <span className="text-xs text-red-600">🔴</span>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className={`text-2xl font-bold ${
-                        data.kpiMetrics.llmStatus.claudeSessions > 0
-                          ? 'text-green-600'
-                          : 'text-gray-400'
-                      }`}
-                    >
-                      {formatNumber(data.kpiMetrics.llmStatus.claudeSessions)}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">Claude</p>
-                    {data.kpiMetrics.llmStatus.claudeSessions === 0 && (
-                      <span className="text-xs text-red-600">🔴</span>
                     )}
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
         )}
-
-        {/* Keyword Ranking Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Search className="w-6 h-6" />
-            キーワード検索順位
-          </h2>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 入力エリア */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">
-                順位データ入力
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                <a
-                  href="https://checker.search-rank-check.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  検索順位チェッカー
-                </a>
-                の結果をコピーして貼り付けてください
-              </p>
-
-              <textarea
-                value={pastedData}
-                onChange={(e) => setPastedData(e.target.value)}
-                placeholder="ゆめスタ    1    4240000    1    4610000    圏外    圏外    -    -    -
-ゆめマガ    1    2980000    1    2960000    圏外    圏外    -    -    -"
-                className="w-full h-48 border border-gray-300 rounded-md p-3 text-sm font-mono"
-                disabled={savingRanks}
-              />
-
-              {rankError && (
-                <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
-                  <p className="text-sm text-red-800">{rankError}</p>
-                </div>
-              )}
-
-              {rankSuccess && (
-                <div className="mt-3 bg-green-50 border border-green-200 rounded p-3">
-                  <p className="text-sm text-green-800">{rankSuccess}</p>
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveRanks}
-                disabled={savingRanks || !pastedData.trim()}
-                className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {savingRanks ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    保存中...
-                  </>
-                ) : (
-                  '保存してスプレッドシートに記録'
-                )}
-              </button>
-            </div>
-
-            {/* 表示エリア */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-bold text-gray-900">
-                  登録済みキーワード順位
-                </h3>
-                <button
-                  onClick={fetchKeywordRanks}
-                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  更新
-                </button>
-              </div>
-
-              {keywordRanks.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">まだデータがありません</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium text-gray-700">
-                          キーワード
-                        </th>
-                        <th className="px-3 py-2 text-center font-medium text-gray-700">
-                          Google
-                        </th>
-                        <th className="px-3 py-2 text-center font-medium text-gray-700">
-                          Yahoo
-                        </th>
-                        <th className="px-3 py-2 text-center font-medium text-gray-700">
-                          Bing
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {keywordRanks.map((rank, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium text-gray-900">
-                            {rank.keyword}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {rank.googleRank ? (
-                              <span
-                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                                  rank.googleRank <= 3
-                                    ? 'bg-green-100 text-green-800'
-                                    : rank.googleRank <= 10
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                {rank.googleRank}位
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 text-xs">圏外</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {rank.yahooRank ? (
-                              <span
-                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                                  rank.yahooRank <= 3
-                                    ? 'bg-green-100 text-green-800'
-                                    : rank.yahooRank <= 10
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                {rank.yahooRank}位
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 text-xs">圏外</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {rank.bingRank ? (
-                              <span
-                                className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                                  rank.bingRank <= 3
-                                    ? 'bg-green-100 text-green-800'
-                                    : rank.bingRank <= 10
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                {rank.bingRank}位
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 text-xs">圏外</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {keywordRanks.length > 0 && keywordRanks[0].updatedAt && (
-                    <p className="text-xs text-gray-500 mt-3 text-right">
-                      最終更新: {new Date(keywordRanks[0].updatedAt).toLocaleString('ja-JP')}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Domain Power Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-6 h-6" />
-            ドメインパワー (yumesuta.com)
-          </h2>
-
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            {domainPower ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                  {/* ドメイン評価 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                    <p className="text-xs text-blue-700 mb-1 font-medium">ドメイン評価</p>
-                    <p className="text-3xl font-bold text-blue-900">{domainPower.domainRating.toFixed(1)}</p>
-                  </div>
-
-                  {/* 被リンク数 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                    <p className="text-xs text-green-700 mb-1 font-medium">被リンク数</p>
-                    <p className="text-3xl font-bold text-green-900">{formatNumber(domainPower.backlinks)}</p>
-                  </div>
-
-                  {/* Dofollow率 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-                    <p className="text-xs text-purple-700 mb-1 font-medium">Dofollow率</p>
-                    <p className="text-3xl font-bold text-purple-900">{domainPower.dofollowPercentage.toFixed(0)}%</p>
-                  </div>
-
-                  {/* リンク元サイト数 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
-                    <p className="text-xs text-orange-700 mb-1 font-medium">リンク元サイト</p>
-                    <p className="text-3xl font-bold text-orange-900">{formatNumber(domainPower.linkingWebsites)}</p>
-                  </div>
-
-                  {/* Dofollowサイト率 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg">
-                    <p className="text-xs text-pink-700 mb-1 font-medium">Dofollowサイト率</p>
-                    <p className="text-3xl font-bold text-pink-900">{domainPower.linkingWebsitesDofollow.toFixed(0)}%</p>
-                  </div>
-
-                  {/* 最終更新 */}
-                  <div className="text-center p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg">
-                    <p className="text-xs text-gray-700 mb-1 font-medium">最終更新</p>
-                    <p className="text-sm font-bold text-gray-900">
-                      {new Date(domainPower.updatedAt).toLocaleDateString('ja-JP')}
-                    </p>
-                  </div>
-                </div>
-
-                {domainSuccess && (
-                  <div className="mb-4 bg-green-50 border border-green-200 rounded p-3">
-                    <p className="text-sm text-green-800">{domainSuccess}</p>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setShowDomainForm(!showDomainForm)}
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  {showDomainForm ? '入力欄を閉じる' : 'データを更新'}
-                </button>
-
-                {showDomainForm && (
-                  <div className="mt-4 border-t pt-4">
-                    <h3 className="text-sm font-bold text-gray-900 mb-3">
-                      最新データを入力してください
-                    </h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          ドメイン評価
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.domainRating}
-                          onChange={(e) => setDomainInput({ ...domainInput, domainRating: e.target.value })}
-                          placeholder="2.8"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          被リンク数
-                        </label>
-                        <input
-                          type="number"
-                          value={domainInput.backlinks}
-                          onChange={(e) => setDomainInput({ ...domainInput, backlinks: e.target.value })}
-                          placeholder="47"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Dofollow率 (%)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.dofollowPercentage}
-                          onChange={(e) => setDomainInput({ ...domainInput, dofollowPercentage: e.target.value })}
-                          placeholder="34"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          リンク元サイト数
-                        </label>
-                        <input
-                          type="number"
-                          value={domainInput.linkingWebsites}
-                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsites: e.target.value })}
-                          placeholder="12"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Dofollowサイト率 (%)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.linkingWebsitesDofollow}
-                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsitesDofollow: e.target.value })}
-                          placeholder="33"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    {domainError && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
-                        <p className="text-sm text-red-800">{domainError}</p>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={handleSaveDomain}
-                      disabled={savingDomain}
-                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {savingDomain ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          保存中...
-                        </>
-                      ) : (
-                        '保存'
-                      )}
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30 text-gray-400" />
-                <p className="text-sm text-gray-500 mb-4">まだデータがありません</p>
-                <button
-                  onClick={() => setShowDomainForm(true)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                >
-                  初回データを入力
-                </button>
-
-                {showDomainForm && (
-                  <div className="mt-6 text-left max-w-2xl mx-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          ドメイン評価
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.domainRating}
-                          onChange={(e) => setDomainInput({ ...domainInput, domainRating: e.target.value })}
-                          placeholder="2.8"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          被リンク数
-                        </label>
-                        <input
-                          type="number"
-                          value={domainInput.backlinks}
-                          onChange={(e) => setDomainInput({ ...domainInput, backlinks: e.target.value })}
-                          placeholder="47"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Dofollow率 (%)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.dofollowPercentage}
-                          onChange={(e) => setDomainInput({ ...domainInput, dofollowPercentage: e.target.value })}
-                          placeholder="34"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          リンク元サイト数
-                        </label>
-                        <input
-                          type="number"
-                          value={domainInput.linkingWebsites}
-                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsites: e.target.value })}
-                          placeholder="12"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Dofollowサイト率 (%)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={domainInput.linkingWebsitesDofollow}
-                          onChange={(e) => setDomainInput({ ...domainInput, linkingWebsitesDofollow: e.target.value })}
-                          placeholder="33"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    {domainError && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
-                        <p className="text-sm text-red-800">{domainError}</p>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={handleSaveDomain}
-                      disabled={savingDomain}
-                      className="mt-4 w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {savingDomain ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          保存中...
-                        </>
-                      ) : (
-                        '保存'
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Google Analytics Section */}
         {data?.googleAnalytics && (
@@ -1303,11 +1171,11 @@ export default function AnalyticsDashboard() {
                   </h4>
                   <div className="flex items-baseline gap-3 mb-4">
                     <p className="text-4xl font-bold text-purple-600">
-                      {data.googleAnalytics.llmTraffic?.totalSessions || 0}
+                      {data.googleAnalytics?.llmTraffic?.totalSessions || 0}
                     </p>
                     <span className="text-sm text-gray-600">セッション</span>
                   </div>
-                  {data.googleAnalytics.llmTraffic && data.googleAnalytics.llmTraffic.totalSessions > 0 ? (
+                  {data.googleAnalytics?.llmTraffic && data.googleAnalytics.llmTraffic.totalSessions > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-purple-900 mb-1">内訳:</p>
                       {data.googleAnalytics.llmTraffic.breakdown.map((source, index) => (
@@ -1334,14 +1202,14 @@ export default function AnalyticsDashboard() {
                   </h4>
                   <div className="flex items-baseline gap-3 mb-4">
                     <p className="text-4xl font-bold text-blue-600">
-                      {data.googleAnalytics.searchEngineTraffic?.total || 0}
+                      {data.googleAnalytics?.searchEngineTraffic?.total || 0}
                     </p>
                     <span className="text-sm text-gray-600">セッション</span>
                   </div>
-                  {data.googleAnalytics.searchEngineTraffic && data.googleAnalytics.searchEngineTraffic.breakdown.length > 0 ? (
+                  {data.googleAnalytics?.searchEngineTraffic && data.googleAnalytics.searchEngineTraffic.breakdown.length > 0 ? (
                     <div className="space-y-2">
                       {data.googleAnalytics.searchEngineTraffic.breakdown.map((engine, index) => {
-                        const total = data.googleAnalytics.searchEngineTraffic?.total || 1;
+                        const total = data.googleAnalytics?.searchEngineTraffic?.total || 1;
                         const percent = ((engine.sessions / total) * 100).toFixed(1);
                         return (
                           <div key={index} className="space-y-1">
@@ -1600,7 +1468,7 @@ export default function AnalyticsDashboard() {
         )}
 
         {/* Microsoft Clarity Section */}
-        {data?.clarity?.summary && (
+        {data?.clarity?.metrics && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Activity className="w-6 h-6" />
@@ -1615,7 +1483,7 @@ export default function AnalyticsDashboard() {
                   <Activity className="w-5 h-5 text-blue-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(data.clarity.summary.sessions)}
+                  {formatNumber(data.clarity.metrics.sessions)}
                 </p>
               </div>
 
@@ -1625,7 +1493,7 @@ export default function AnalyticsDashboard() {
                   <BarChart3 className="w-5 h-5 text-green-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {data.clarity.summary.avgScrollDepth.toFixed(1)}%
+                  {data.clarity.metrics.avgScrollDepth.toFixed(1)}%
                 </p>
               </div>
 
@@ -1635,7 +1503,7 @@ export default function AnalyticsDashboard() {
                   <Activity className="w-5 h-5 text-purple-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatDuration(data.clarity.summary.avgTimeOnPage)}
+                  {formatDuration(data.clarity.metrics.avgTimeOnPage)}
                 </p>
               </div>
 
@@ -1645,7 +1513,7 @@ export default function AnalyticsDashboard() {
                   <AlertCircle className="w-5 h-5 text-red-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(data.clarity.summary.rageclicks)}
+                  {formatNumber(data.clarity.metrics.rageclicks)}
                 </p>
               </div>
 
@@ -1655,7 +1523,7 @@ export default function AnalyticsDashboard() {
                   <AlertCircle className="w-5 h-5 text-orange-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(data.clarity.summary.deadclicks)}
+                  {formatNumber(data.clarity.metrics.deadclicks)}
                 </p>
               </div>
 
@@ -1665,7 +1533,7 @@ export default function AnalyticsDashboard() {
                   <AlertCircle className="w-5 h-5 text-yellow-600" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatNumber(data.clarity.summary.quickbacks)}
+                  {formatNumber(data.clarity.metrics.quickbacks)}
                 </p>
               </div>
             </div>
@@ -1756,6 +1624,6 @@ export default function AnalyticsDashboard() {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }

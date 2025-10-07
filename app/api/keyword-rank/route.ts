@@ -9,6 +9,9 @@ export interface KeywordRankData {
   googleHits: number | null;
   yahooHits: number | null;
   bingHits: number | null;
+  googleMobileRank: number | null;
+  yahooMobileRank: number | null;
+  bingMobileRank: number | null;
   updatedAt: string;
 }
 
@@ -26,8 +29,8 @@ export async function GET() {
       );
     }
 
-    // スプレッドシートからキーワード順位データを取得
-    const data = await getSheetData(spreadsheetId, 'キーワード順位!A1:H100');
+    // スプレッドシートからキーワード順位データを取得（K列まで拡張）
+    const data = await getSheetData(spreadsheetId, 'SEOキーワード順位記録!A1:K100');
 
     if (!data || data.length === 0) {
       return NextResponse.json({
@@ -50,7 +53,10 @@ export async function GET() {
         googleHits: parseHits(row[4]),
         yahooHits: parseHits(row[5]),
         bingHits: parseHits(row[6]),
-        updatedAt: row[7] || '',
+        googleMobileRank: parseRank(row[7]),
+        yahooMobileRank: parseRank(row[8]),
+        bingMobileRank: parseRank(row[9]),
+        updatedAt: row[10] || '',
       }));
 
     return NextResponse.json({
@@ -73,9 +79,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    console.log('📥 受信データ:', body);
     const { pastedData } = body;
+    console.log('📝 pastedData:', pastedData);
 
     if (!pastedData) {
+      console.log('❌ pastedData が空です');
       return NextResponse.json(
         { success: false, error: 'pastedData is required' },
         { status: 400 }
@@ -93,16 +102,19 @@ export async function POST(request: Request) {
 
     // ペーストデータをパース
     const parsedData = parseRankCheckerData(pastedData);
+    console.log('✅ パース結果:', parsedData.length, '件');
+    console.log('📊 パースデータ例:', parsedData[0]);
 
     if (parsedData.length === 0) {
+      console.log('❌ 有効なデータがありません');
       return NextResponse.json(
         { success: false, error: 'No valid data found' },
         { status: 400 }
       );
     }
 
-    // 既存データを取得
-    const existingData = await getSheetData(spreadsheetId, 'キーワード順位!A1:H100');
+    // 既存データを取得（K列まで拡張）
+    const existingData = await getSheetData(spreadsheetId, 'SEOキーワード順位記録!A1:K100');
 
     // ヘッダー行
     const headers = existingData[0] || [
@@ -113,6 +125,9 @@ export async function POST(request: Request) {
       'Googleヒット数',
       'Yahooヒット数',
       'Bingヒット数',
+      'Googleスマホ順位',
+      'Yahooスマホ順位',
+      'Bingスマホ順位',
       '最終更新日時',
     ];
 
@@ -140,6 +155,9 @@ export async function POST(request: Request) {
         item.googleHits ?? '',
         item.yahooHits ?? '',
         item.bingHits ?? '',
+        item.googleMobileRank ?? '-',
+        item.yahooMobileRank ?? '-',
+        item.bingMobileRank ?? '-',
         now,
       ]);
     });
@@ -149,7 +167,7 @@ export async function POST(request: Request) {
 
     // スプレッドシートに書き込み
     const allData = [headers, ...updatedRows];
-    await updateSheetData(spreadsheetId, 'キーワード順位!A1:H100', allData);
+    await updateSheetData(spreadsheetId, 'SEOキーワード順位記録!A1:K100', allData);
 
     return NextResponse.json({
       success: true,
@@ -157,7 +175,8 @@ export async function POST(request: Request) {
       data: parsedData,
     });
   } catch (error: any) {
-    console.error('Failed to save keyword rankings:', error);
+    console.error('❌ エラー詳細:', error);
+    console.error('❌ スタックトレース:', error.stack);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -168,9 +187,10 @@ export async function POST(request: Request) {
 /**
  * 検索順位チェッカーの結果をパース
  *
- * 入力例:
- * ゆめスタ    1    4240000    1    4610000    圏外    圏外    -    -    -
- * ゆめマガ    1    2980000    1    2960000    圏外    圏外    -    -    -
+ * 入力例（新フォーマット）:
+ * キーワード    順位    ヒット数    順位    ヒット数    順位    ヒット数    順位    順位    順位
+ * ゆめスタ    1    4240000    1    4610000    圏外    圏外    1    1    圏外
+ * ゆめマガ    2    2980000    3    2960000    圏外    圏外    2    3    圏外
  */
 function parseRankCheckerData(pastedData: string): KeywordRankData[] {
   const lines = pastedData.split('\n').filter((line) => line.trim());
@@ -181,23 +201,44 @@ function parseRankCheckerData(pastedData: string): KeywordRankData[] {
     // タブまたは複数スペースで分割
     const parts = line.split(/\t+|\s{2,}/).map((p) => p.trim());
 
-    if (parts.length < 7) {
-      return; // 不正な行はスキップ
+    // 最低1カラム必要（キーワードのみ）
+    if (parts.length < 1) {
+      return;
     }
 
     const keyword = parts[0];
 
-    // Google順位（1列目）
+    // ヘッダー行・無効な行をスキップ
+    if (
+      !keyword ||
+      keyword === 'キーワード' ||
+      keyword === 'keyword' ||
+      keyword === 'スマホ順位' ||
+      keyword === '順位' ||
+      keyword === 'Google' ||
+      keyword === 'Yahoo' ||
+      keyword === 'Bing' ||
+      keyword.includes('ヒット数')
+    ) {
+      return;
+    }
+
+    // Google PC順位（1列目）
     const googleRank = parseRank(parts[1]);
     const googleHits = parseHits(parts[2]);
 
-    // Yahoo順位（3列目）
+    // Yahoo PC順位（3列目）
     const yahooRank = parseRank(parts[3]);
     const yahooHits = parseHits(parts[4]);
 
-    // Bing順位（5列目）
+    // Bing PC順位（5列目）
     const bingRank = parseRank(parts[5]);
     const bingHits = parseHits(parts[6]);
+
+    // スマホ順位（7-9列目）- 存在しない場合はnull
+    const googleMobileRank = parseRank(parts[7]);
+    const yahooMobileRank = parseRank(parts[8]);
+    const bingMobileRank = parseRank(parts[9]);
 
     results.push({
       keyword,
@@ -207,6 +248,9 @@ function parseRankCheckerData(pastedData: string): KeywordRankData[] {
       googleHits,
       yahooHits,
       bingHits,
+      googleMobileRank,
+      yahooMobileRank,
+      bingMobileRank,
       updatedAt: new Date().toISOString(),
     });
   });

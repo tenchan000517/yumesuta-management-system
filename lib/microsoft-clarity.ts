@@ -29,11 +29,13 @@ export async function getClarityMetrics(
   numOfDays: '1' | '2' | '3' = '1',
   dimension1?: string,
   dimension2?: string,
-  dimension3?: string
+  dimension3?: string,
+  retries = 3,
+  delayMs = 1000
 ): Promise<{
   summary: ClarityMetrics;
   breakdown?: ClarityDimension[];
-}> {
+} | null> {
   const params = new URLSearchParams({
     numOfDays,
   });
@@ -42,21 +44,55 @@ export async function getClarityMetrics(
   if (dimension2) params.append('dimension2', dimension2);
   if (dimension3) params.append('dimension3', dimension3);
 
-  const response = await fetch(
-    `https://www.clarity.ms/export-data/api/v1/project-live-insights?${params}`,
-    {
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://www.clarity.ms/export-data/api/v1/project-live-insights?${params}`,
+        {
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-  if (!response.ok) {
-    throw new Error(`Clarity API error: ${response.status} ${response.statusText}`);
+      // Handle rate limiting with exponential backoff
+      if (response.status === 429) {
+        if (attempt < retries) {
+          const waitTime = delayMs * Math.pow(2, attempt);
+          console.warn(`Clarity API rate limit hit. Retrying in ${waitTime}ms... (attempt ${attempt + 1}/${retries})`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        } else {
+          console.error('Clarity API rate limit exceeded after all retries. Returning null.');
+          return null;
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Clarity API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return parseData(data);
+    } catch (error) {
+      if (attempt === retries) {
+        console.error('Clarity API request failed after all retries:', error);
+        return null;
+      }
+      const waitTime = delayMs * Math.pow(2, attempt);
+      console.warn(`Clarity API error. Retrying in ${waitTime}ms... (attempt ${attempt + 1}/${retries})`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
 
-  const data = await response.json();
+  return null;
+}
+
+function parseData(data: any): {
+  summary: ClarityMetrics;
+  breakdown?: ClarityDimension[];
+} {
 
   // Parse the summary metrics
   const summary: ClarityMetrics = {

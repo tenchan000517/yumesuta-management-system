@@ -201,7 +201,12 @@ export async function GET(request: Request) {
           'Country' // Example dimension
         );
 
-        analyticsData.clarity = clarityData;
+        // Clarity might return null if rate limited
+        if (clarityData) {
+          analyticsData.clarity = clarityData;
+        } else {
+          console.warn('Clarity API unavailable (rate limited or error). Skipping Clarity metrics.');
+        }
       }
     } catch (error) {
       console.error('Microsoft Clarity API error:', error);
