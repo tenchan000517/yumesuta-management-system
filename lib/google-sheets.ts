@@ -149,3 +149,176 @@ export async function updateSheetData(
     throw error;
   }
 }
+
+/**
+ * Update a single cell
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param row - Row number (1-indexed)
+ * @param col - Column number (1-indexed)
+ * @param value - The value to write
+ */
+export async function updateCell(
+  spreadsheetId: string,
+  sheetName: string,
+  row: number,
+  col: number,
+  value: any
+): Promise<void> {
+  const colLetter = String.fromCharCode(64 + col); // 1=A, 2=B, etc.
+  const range = `${sheetName}!${colLetter}${row}`;
+  await updateSheetData(spreadsheetId, range, [[value]]);
+}
+
+/**
+ * Append rows to the end of a sheet
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param values - 2D array of values to append
+ */
+export async function appendSheetData(
+  spreadsheetId: string,
+  sheetName: string,
+  values: any[][]
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: sheetName,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values,
+      },
+    });
+
+    console.log(`✅ Appended ${values.length} rows to ${sheetName}`);
+  } catch (error) {
+    console.error('Failed to append sheet data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Insert columns into a sheet
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetId - The sheet ID (not name)
+ * @param startIndex - Column index to insert at (0-indexed)
+ * @param columnCount - Number of columns to insert
+ */
+export async function insertColumns(
+  spreadsheetId: string,
+  sheetId: number,
+  startIndex: number,
+  columnCount: number = 1
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            insertDimension: {
+              range: {
+                sheetId,
+                dimension: 'COLUMNS',
+                startIndex,
+                endIndex: startIndex + columnCount,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    console.log(`✅ Inserted ${columnCount} column(s) at index ${startIndex}`);
+  } catch (error) {
+    console.error('Failed to insert columns:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete columns from a sheet
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetId - The sheet ID (not name)
+ * @param startIndex - Column index to delete from (0-indexed)
+ * @param columnCount - Number of columns to delete
+ */
+export async function deleteColumns(
+  spreadsheetId: string,
+  sheetId: number,
+  startIndex: number,
+  columnCount: number = 1
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: 'COLUMNS',
+                startIndex,
+                endIndex: startIndex + columnCount,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    console.log(`✅ Deleted ${columnCount} column(s) from index ${startIndex}`);
+  } catch (error) {
+    console.error('Failed to delete columns:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete rows from a sheet
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetId - The sheet ID (not name)
+ * @param startIndex - Row index to delete from (0-indexed)
+ * @param rowCount - Number of rows to delete
+ */
+export async function deleteRows(
+  spreadsheetId: string,
+  sheetId: number,
+  startIndex: number,
+  rowCount: number = 1
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex,
+                endIndex: startIndex + rowCount,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    console.log(`✅ Deleted ${rowCount} row(s) from index ${startIndex}`);
+  } catch (error) {
+    console.error('Failed to delete rows:', error);
+    throw error;
+  }
+}

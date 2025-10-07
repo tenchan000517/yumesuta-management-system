@@ -1,0 +1,788 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import {
+  ArrowLeft,
+  Calendar,
+  Upload,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Play,
+  FileText,
+  Trash2,
+} from 'lucide-react';
+import { NextMonthPrepSection } from '@/components/next-month/NextMonthPrepSection';
+import { CategoryManagementSection } from '@/components/category-management/CategoryManagementSection';
+
+export default function YumeMagaV2Page() {
+  const [publishDate, setPublishDate] = useState('2025-11-08');
+  const [selectedIssue, setSelectedIssue] = useState('2025年11月号');
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('A');
+  const [confirmationStatus, setConfirmationStatus] = useState<Record<string, string>>({
+    A: 'not_sent',
+    K: 'pending',
+    H: 'approved',
+  });
+
+  // モックデータ
+  const summary = {
+    completed: 45,
+    inProgress: 12,
+    notStarted: 23,
+    delayed: 3,
+  };
+
+  // 次月号準備データ（モック）
+  const nextMonthProcesses = [
+    { processNo: 'S-1', name: 'ゆめマガ12月号企画決定', plannedDate: '10/8', actualDate: '10/8', status: 'completed' as const },
+    { processNo: 'S-2', name: 'ゆめマガ12月号企画書作成', plannedDate: '10/8', actualDate: '', status: 'in_progress' as const },
+    { processNo: 'A-1', name: 'メインインタビュー実施日報告', plannedDate: '10/9', actualDate: '', status: 'not_started' as const },
+    { processNo: 'K-1', name: 'インタビュー②実施日報告', plannedDate: '10/9', actualDate: '', status: 'not_started' as const },
+    { processNo: 'L-1', name: '企画内容報告', plannedDate: '10/10', actualDate: '', status: 'not_started' as const },
+    { processNo: 'L-2', name: '実施日報告', plannedDate: '10/10', actualDate: '', status: 'not_started' as const },
+    { processNo: 'L-3', name: 'ネーム作成', plannedDate: '10/11', actualDate: '', status: 'not_started' as const },
+    { processNo: 'M-1', name: '企画内容報告', plannedDate: '10/11', actualDate: '', status: 'not_started' as const },
+    { processNo: 'M-2', name: '実施日報告', plannedDate: '10/12', actualDate: '', status: 'not_started' as const },
+    { processNo: 'M-3', name: 'ネーム作成', plannedDate: '10/12', actualDate: '', status: 'not_started' as const },
+    { processNo: 'H-1', name: 'STAR①実施日報告', plannedDate: '10/13', actualDate: '', status: 'not_started' as const },
+    { processNo: 'I-1', name: 'STAR②実施日報告', plannedDate: '10/13', actualDate: '', status: 'not_started' as const },
+    { processNo: 'C-1', name: '新規企業①情報シート依頼', plannedDate: '10/14', actualDate: '', status: 'not_started' as const },
+    { processNo: 'C-3', name: '新規企業①写真取得依頼', plannedDate: '10/14', actualDate: '', status: 'not_started' as const },
+  ];
+
+  // カテゴリ別工程データ
+  const categories = [
+    {
+      id: 'A',
+      name: 'メイン記事',
+      progress: 60,
+      completed: 3,
+      total: 5,
+      canvaUrl: 'https://canva.com/design/example-a',
+      confirmationRequired: true, // 先方確認が必要
+      processes: [
+        {
+          id: 'A-2',
+          name: 'メインインタビューデータ提出・撮影',
+          plannedDate: '9/28',
+          actualDate: '',
+          status: 'delayed',
+        },
+        {
+          id: 'A-3',
+          name: 'メイン文字起こし',
+          plannedDate: '9/29',
+          actualDate: '9/29',
+          status: 'completed',
+        },
+        {
+          id: 'A-4',
+          name: 'メイン内容整理',
+          plannedDate: '9/30',
+          actualDate: '',
+          status: 'in_progress',
+        },
+        {
+          id: 'A-5',
+          name: 'キャッチコピー抽出',
+          plannedDate: '9/30',
+          actualDate: '',
+          status: 'not_started',
+        },
+        {
+          id: 'A-6',
+          name: '表紙デザイン案作成',
+          plannedDate: '10/1',
+          actualDate: '10/1',
+          status: 'completed',
+        },
+      ],
+      requiredData: [
+        { type: 'audio', name: '録音データ', status: 'submitted', deadline: '9/28' },
+        { type: 'document', name: '文字起こし', status: 'pending', deadline: '9/29', optional: true },
+        { type: 'image', name: '写真画像', status: 'submitted', deadline: '9/28' },
+      ],
+    },
+    {
+      id: 'K',
+      name: 'インタビュー②',
+      progress: 25,
+      completed: 1,
+      total: 4,
+      canvaUrl: null,
+      confirmationRequired: true,
+      processes: [
+        {
+          id: 'K-2',
+          name: 'インタビュー②データ提出',
+          plannedDate: '9/28',
+          actualDate: '',
+          status: 'delayed',
+        },
+        {
+          id: 'K-3',
+          name: 'インタビュー②文字起こし',
+          plannedDate: '9/29',
+          actualDate: '',
+          status: 'not_started',
+        },
+        {
+          id: 'K-4',
+          name: 'インタビュー②内容整理',
+          plannedDate: '9/30',
+          actualDate: '',
+          status: 'not_started',
+        },
+        {
+          id: 'K-5',
+          name: 'インタビュー②ページ制作',
+          plannedDate: '10/2',
+          actualDate: '10/2',
+          status: 'completed',
+        },
+      ],
+      requiredData: [
+        { type: 'audio', name: '録音データ', status: 'pending', deadline: '9/28' },
+        { type: 'document', name: '文字起こし', status: 'none', deadline: '9/29', optional: true },
+        { type: 'image', name: '写真画像', status: 'submitted', deadline: '9/28' },
+      ],
+    },
+    {
+      id: 'H',
+      name: 'STAR①',
+      progress: 100,
+      completed: 4,
+      total: 4,
+      canvaUrl: 'https://canva.com/design/example-h',
+      confirmationRequired: true,
+      processes: [
+        {
+          id: 'H-2',
+          name: 'STAR①データ提出',
+          plannedDate: '9/27',
+          actualDate: '9/27',
+          status: 'completed',
+        },
+        {
+          id: 'H-3',
+          name: 'STAR①文字起こし',
+          plannedDate: '9/28',
+          actualDate: '9/28',
+          status: 'completed',
+        },
+        {
+          id: 'H-4',
+          name: 'STAR①内容整理',
+          plannedDate: '9/29',
+          actualDate: '9/29',
+          status: 'completed',
+        },
+        {
+          id: 'H-5',
+          name: 'STAR①ページ制作',
+          plannedDate: '10/1',
+          actualDate: '10/1',
+          status: 'completed',
+        },
+      ],
+      requiredData: [
+        { type: 'audio', name: '録音データ', status: 'submitted', deadline: '9/27' },
+        { type: 'document', name: '文字起こし', status: 'submitted', deadline: '9/28', optional: true },
+        { type: 'image', name: '写真画像', status: 'submitted', deadline: '9/27' },
+      ],
+    },
+    {
+      id: 'Z',
+      name: '全体進捗',
+      progress: 0, // 動的計算
+      completed: 0,
+      total: 0,
+      canvaUrl: null,
+      confirmationRequired: false, // Zは確認送付なし
+      processes: [],
+      requiredData: [],
+    },
+  ];
+
+  const handleGenerateSchedule = () => {
+    alert(`${publishDate}からの逆算スケジュールを生成します（バックエンド未実装）`);
+  };
+
+  const handleSaveProgress = () => {
+    alert('実績データを保存します（バックエンド未実装）');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      alert(`${files.length}件のファイルをアップロードします（バックエンド未実装）`);
+    }
+  };
+
+  const handleOpenDrive = (categoryId: string) => {
+    alert(`Googleドライブ: /ゆめマガ/${selectedIssue}/カテゴリ${categoryId}/ を開きます（バックエンド未実装）`);
+  };
+
+  const handleOpenCanva = (canvaUrl: string | null) => {
+    if (canvaUrl) {
+      alert(`Canvaページを開きます: ${canvaUrl}（実装時は window.open）`);
+    } else {
+      alert(`Canvaメインページ「${selectedIssue}」を開きます（バックエンド未実装）`);
+    }
+  };
+
+  const getDataStatusIcon = (status: string) => {
+    switch (status) {
+      case 'submitted':
+        return '✅';
+      case 'pending':
+        return '⚠️';
+      default:
+        return '－';
+    }
+  };
+
+  const getConfirmationStatusBadge = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded font-semibold">✅ 確認OK</span>;
+      case 'pending':
+        return <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded font-semibold">⏳ 確認待ち</span>;
+      default:
+        return <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">未送付</span>;
+    }
+  };
+
+  const handleUpdateConfirmation = (categoryId: string, status: string) => {
+    setConfirmationStatus({ ...confirmationStatus, [categoryId]: status });
+    alert(`カテゴリ${categoryId}の確認ステータスを「${status}」に更新しました（バックエンド未実装）`);
+  };
+
+  const handleNextMonthRefresh = () => {
+    alert('次月号準備データを更新しました（バックエンド未実装）');
+  };
+
+  const handleNextMonthUpdateActualDate = async (processNo: string, date: string) => {
+    alert(`次月号工程${processNo}の実績日を「${date}」に更新しました（バックエンド未実装）`);
+  };
+
+  // カテゴリZの進捗を計算
+  const calculateOverallProgress = () => {
+    const nonZCategories = categories.filter(c => c.id !== 'Z');
+    const totalProgress = nonZCategories.reduce((sum, cat) => sum + cat.progress, 0);
+    const avgProgress = totalProgress / nonZCategories.length;
+
+    const completedCategories = nonZCategories.filter(cat =>
+      cat.progress === 100 && confirmationStatus[cat.id] === 'approved'
+    ).length;
+
+    return {
+      progress: Math.round(avgProgress),
+      completed: completedCategories,
+      total: nonZCategories.length,
+    };
+  };
+
+  const overallProgress = calculateOverallProgress();
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
+            <CheckCircle2 className="w-4 h-4" />
+            完了
+          </span>
+        );
+      case 'in_progress':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+            <Clock className="w-4 h-4" />
+            進行中
+          </span>
+        );
+      case 'delayed':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-semibold">
+            <AlertCircle className="w-4 h-4" />
+            遅延
+          </span>
+        );
+      default:
+        return (
+          <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
+            未着手
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-3 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            トップページへ戻る
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-900">
+            ゆめマガ制作進捗管理 <span className="text-sm text-blue-600">v2.0</span>
+          </h1>
+          <p className="text-gray-600 mt-1">発行日逆算・予実管理・ファイル管理の統合ダッシュボード</p>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {/* 新規号作成 / 月号選択 */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Calendar className="w-6 h-6 text-blue-600" />
+            <h2 className="text-xl font-bold text-gray-900">新規号作成 / 月号選択</h2>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 新規作成 */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3">新規号を作成</h3>
+              <div className="flex gap-3">
+                <input
+                  type="date"
+                  value={publishDate}
+                  onChange={(e) => setPublishDate(e.target.value)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleGenerateSchedule}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                >
+                  <Play className="w-5 h-5" />
+                  逆算実行
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                発行日から60日間の逆算スケジュールを自動生成します
+              </p>
+            </div>
+
+            {/* 既存号読み込み */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3">既存の号を読み込み</h3>
+              <div className="flex gap-3">
+                <select
+                  value={selectedIssue}
+                  onChange={(e) => setSelectedIssue(e.target.value)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option>2025年11月号</option>
+                  <option>2025年10月号</option>
+                  <option>2025年9月号</option>
+                </select>
+                <button className="flex items-center gap-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold">
+                  <FileText className="w-5 h-5" />
+                  読み込み
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                過去に作成したスケジュールを読み込んで編集できます
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 進捗サマリー */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">進捗サマリー</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-green-700 font-semibold">完了</span>
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="text-3xl font-bold text-green-900 mt-2">{summary.completed}</div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-700 font-semibold">進行中</span>
+                <Clock className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="text-3xl font-bold text-blue-900 mt-2">{summary.inProgress}</div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700 font-semibold">未着手</span>
+                <Calendar className="w-5 h-5 text-gray-600" />
+              </div>
+              <div className="text-3xl font-bold text-gray-900 mt-2">{summary.notStarted}</div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-red-700 font-semibold">遅延</span>
+                <AlertCircle className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="text-3xl font-bold text-red-900 mt-2">{summary.delayed}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 次月号事前準備 */}
+        <NextMonthPrepSection
+          currentMonthIssue={selectedIssue}
+          nextMonthIssue="2025年12月号"
+          processes={nextMonthProcesses}
+          onRefresh={handleNextMonthRefresh}
+          onUpdateActualDate={handleNextMonthUpdateActualDate}
+        />
+
+        {/* カテゴリ別予実管理 */}
+        <CategoryManagementSection
+          categories={categories}
+          confirmationStatus={confirmationStatus}
+          expandedCategory={expandedCategory}
+          onSave={handleSaveProgress}
+          onOpenDrive={handleOpenDrive}
+          onOpenCanva={handleOpenCanva}
+          onUpdateConfirmation={handleUpdateConfirmation}
+          onToggleExpand={(categoryId) =>
+            setExpandedCategory(expandedCategory === categoryId ? null : categoryId)
+          }
+        />
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">カテゴリ別予実管理</h2>
+            <button
+              onClick={handleSaveProgress}
+              className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+            >
+              <Save className="w-5 h-5" />
+              一括保存
+            </button>
+          </div>
+
+          {/* 全体進捗カード（常に表示） */}
+          <div className="mb-6">
+            <div className="border-2 border-purple-300 rounded-lg overflow-hidden bg-purple-50">
+              <div className="bg-gradient-to-r from-purple-100 to-purple-200 p-4 border-b border-purple-300">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-gray-900 text-lg">
+                    カテゴリZ: 全体進捗
+                  </h3>
+                  <span className="text-2xl font-bold text-purple-600">{overallProgress.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div
+                    className="bg-purple-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${overallProgress.progress}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-gray-700">
+                  {overallProgress.completed}/{overallProgress.total}カテゴリ完全完了
+                </p>
+              </div>
+              <div className="p-4">
+                <h4 className="font-semibold text-sm text-gray-900 mb-3">各カテゴリの状況</h4>
+                <div className="space-y-2">
+                  {categories.filter(c => c.id !== 'Z').map(c => {
+                    const isComplete = c.progress === 100 && confirmationStatus[c.id] === 'approved';
+                    return (
+                      <div key={c.id} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700">
+                          {isComplete ? '✅' : '⚠️'} {c.id}: {c.name}
+                        </span>
+                        <span className="text-gray-600">{c.progress}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  ※Zは各カテゴリの集約のみ。独自の確認送付はありません。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 折りたたみボタン */}
+          <div className="mb-6 flex justify-center">
+            <button
+              onClick={() => setShowCategoryCards(!showCategoryCards)}
+              className="flex items-center gap-2 px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold"
+            >
+              {showCategoryCards ? (
+                <>
+                  <ChevronUp className="w-5 h-5" />
+                  カテゴリ詳細を閉じる
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-5 h-5" />
+                  カテゴリ詳細を開く
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* カテゴリカード一覧（折りたたみ可能） */}
+          {showCategoryCards && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.filter(c => c.id !== 'Z').map((category) => {
+              return (
+                <div
+                  key={category.id}
+                  className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                >
+                  {/* カードヘッダー */}
+                  <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-bold text-gray-900 text-lg">
+                        カテゴリ{category.id}: {category.name}
+                      </h3>
+                      <span className="text-2xl font-bold text-blue-600">{category.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                      <div
+                        className="bg-blue-600 h-2.5 rounded-full transition-all"
+                        style={{ width: `${category.progress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      {category.completed}/{category.total}工程完了
+                    </p>
+                  </div>
+
+                {/* 操作ボタン */}
+                <div className="p-4 bg-gray-50 border-b border-gray-200">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleOpenDrive(category.id)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
+                    >
+                      <Folder className="w-4 h-4" />
+                      Drive
+                    </button>
+                    <button
+                      onClick={() => handleOpenCanva(category.canvaUrl)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-semibold"
+                    >
+                      🎨 Canva
+                    </button>
+                  </div>
+                  {!category.canvaUrl && (
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      ※未登録のためメインページへ移動
+                    </p>
+                  )}
+                </div>
+
+                {/* 先方確認ステータス */}
+                {category.confirmationRequired && (
+                  <div className="p-4 bg-gray-50 border-b border-gray-200">
+                    <h4 className="font-semibold text-sm text-gray-900 mb-2">📋 先方確認ステータス</h4>
+                    <div className="mb-2">
+                      {getConfirmationStatusBadge(confirmationStatus[category.id] || 'not_sent')}
+                    </div>
+                    <select
+                      value={confirmationStatus[category.id] || 'not_sent'}
+                      onChange={(e) => handleUpdateConfirmation(category.id, e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="not_sent">未送付</option>
+                      <option value="pending">確認待ち</option>
+                      <option value="approved">確認OK</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* 展開ボタン */}
+                <div className="p-4">
+                  <button
+                    onClick={() =>
+                      setExpandedCategory(expandedCategory === category.id ? null : category.id)
+                    }
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold"
+                  >
+                    {expandedCategory === category.id ? '閉じる ▲' : '工程詳細を開く ▼'}
+                  </button>
+                </div>
+
+                {/* 工程詳細（展開時） */}
+                {expandedCategory === category.id && (
+                  <div className="px-4 pb-4">
+                    <div className="space-y-2">
+                      {category.processes.map((process) => (
+                        <div
+                          key={process.id}
+                          className="border border-gray-200 rounded-lg p-3 bg-white"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm text-gray-900">{process.name}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                予定: {process.plannedDate}
+                              </p>
+                            </div>
+                            <div className="ml-2">{getStatusBadge(process.status)}</div>
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="実績日を入力"
+                            defaultValue={process.actualDate}
+                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })}
+            </div>
+          )}
+        </div>
+
+        {/* データ提出進捗管理 */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Upload className="w-6 h-6 text-blue-600" />
+            <h2 className="text-xl font-bold text-gray-900">データ提出進捗管理</h2>
+          </div>
+
+          {/* ファイルアップロードエリア */}
+          <div className="border border-gray-200 rounded-lg p-6 mb-6">
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                カテゴリを選択
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    カテゴリ{c.id}: {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-8 text-center">
+              <Upload className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+              <p className="text-gray-700 mb-2">
+                <label className="cursor-pointer text-blue-600 hover:text-blue-700 font-semibold">
+                  ファイルを選択
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                {' '}または ドラッグ&ドロップ
+              </p>
+              <p className="text-sm text-gray-500">
+                カテゴリ{selectedCategory}のデータをアップロード
+              </p>
+            </div>
+          </div>
+
+          {/* カテゴリ別データ提出状況 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.map((category) => {
+              const hasDeadlinePassed = category.requiredData.some(
+                (data) => data.status === 'pending' && !data.optional
+              );
+
+              return (
+                <div
+                  key={category.id}
+                  className={`border rounded-lg overflow-hidden ${
+                    hasDeadlinePassed ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  {/* カテゴリヘッダー */}
+                  <div
+                    className={`p-4 border-b ${
+                      hasDeadlinePassed
+                        ? 'bg-red-100 border-red-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <h3 className="font-bold text-gray-900">
+                      カテゴリ{category.id}: {category.name}
+                    </h3>
+                    <p
+                      className={`text-sm mt-1 ${
+                        hasDeadlinePassed ? 'text-red-700 font-semibold' : 'text-gray-600'
+                      }`}
+                    >
+                      {hasDeadlinePassed ? '⚠️ 期限超過あり' : '✅ 順調'}
+                    </p>
+                  </div>
+
+                  {/* データ一覧 */}
+                  <div className="p-4 space-y-3">
+                    {category.requiredData.map((data, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{getDataStatusIcon(data.status)}</span>
+                            <p className="font-semibold text-sm text-gray-900">{data.name}</p>
+                            {data.optional && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
+                                任意
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500">〆切: {data.deadline}</p>
+                        </div>
+                        <div className="ml-2">
+                          {data.status === 'submitted' ? (
+                            <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded font-semibold">
+                              提出済み
+                            </span>
+                          ) : data.status === 'pending' ? (
+                            <span className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded font-semibold">
+                              未提出
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded">
+                              －
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ガントチャート（簡易版・後で実装） */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">ガントチャート（全期間）</h2>
+          <div className="bg-gray-100 border border-gray-300 rounded-lg p-12 text-center">
+            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">ガントチャートは次フェーズで実装します</p>
+            <p className="text-sm text-gray-500 mt-2">
+              既存の /dashboard/yumemaga のガントチャートを参考に全期間表示に対応
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

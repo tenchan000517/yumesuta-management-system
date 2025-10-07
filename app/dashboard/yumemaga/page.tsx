@@ -91,8 +91,9 @@ export default function YumeMagaDashboardPage() {
   const inProgressTasks = progressData.filter((p) => p.status === 'in_progress');
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダーとアラート（通常幅） */}
+      <div className="max-w-7xl mx-auto px-8 py-8">
         {/* ヘッダー */}
         <div className="mb-8">
           <Link
@@ -178,9 +179,11 @@ export default function YumeMagaDashboardPage() {
             </div>
           </div>
         )}
+      </div>
 
-        {/* ガントチャート */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      {/* ガントチャート（フルワイド） */}
+      <div className="w-full px-4 mb-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Calendar className="w-6 h-6" />
             工程スケジュール（ガントチャート）
@@ -258,8 +261,10 @@ export default function YumeMagaDashboardPage() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 進捗一覧テーブル */}
+      {/* 進捗一覧テーブル（通常幅） */}
+      <div className="max-w-7xl mx-auto px-8 pb-8">
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <ClipboardList className="w-6 h-6" />

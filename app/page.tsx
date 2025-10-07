@@ -13,7 +13,11 @@ import {
   AlertTriangle,
   Zap,
   ExternalLink,
-  Radar
+  Radar,
+  AlertCircle,
+  Activity,
+  Eye,
+  Search
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
@@ -35,6 +39,11 @@ interface DashboardSummary {
   analytics: {
     monthlyUsers: number;
     searchRankingChange: number;
+    kpi?: any;
+    ga?: any;
+    llm?: any;
+    searchEngines?: any;
+    keywordRanks?: any[];
   } | null;
   sns: {
     todayScheduled: number;
@@ -63,7 +72,7 @@ export default function Home() {
     setLoading(true);
     try {
       // 全APIを並列で取得
-      const [salesRes, yumemagaRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes] = await Promise.all([
+      const [salesRes, yumemagaRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes] = await Promise.all([
         fetch('/api/sales-kpi'),
         fetch('/api/process-schedule'),
         fetch('/api/tasks'),
@@ -71,9 +80,10 @@ export default function Home() {
         fetch('/api/sns'),
         fetch('/api/partners'),
         fetch('/api/quick-access'),
+        fetch('/api/keyword-rank'),
       ]);
 
-      const [salesData, yumemagaData, tasksData, analyticsData, snsData, partnersData, quickAccessData] = await Promise.all([
+      const [salesData, yumemagaData, tasksData, analyticsData, snsData, partnersData, quickAccessData, keywordRankData] = await Promise.all([
         salesRes.json(),
         yumemagaRes.json(),
         tasksRes.json(),
@@ -81,6 +91,7 @@ export default function Home() {
         snsRes.json(),
         partnersRes.json(),
         quickAccessRes.json(),
+        keywordRankRes.json(),
       ]);
 
       // クイックアクセスボタンを設定
@@ -114,7 +125,12 @@ export default function Home() {
         } : null,
         analytics: analyticsData.success ? {
           monthlyUsers: analyticsData.data?.googleAnalytics?.metrics?.activeUsers || 0,
-          searchRankingChange: 0, // Analytics未実装
+          searchRankingChange: 0,
+          kpi: analyticsData.data?.kpiMetrics?.kgi || null,
+          ga: analyticsData.data?.googleAnalytics?.metrics || null,
+          llm: analyticsData.data?.kpiMetrics?.llmStatus || null,
+          searchEngines: analyticsData.data?.googleAnalytics?.searchEngineTraffic || null,
+          keywordRanks: keywordRankData.success ? (keywordRankData.data || []) : [],
         } : null,
         sns: snsData.success ? {
           todayScheduled: 0, // SNS未実装
@@ -458,15 +474,522 @@ export default function Home() {
                   詳細 →
                 </Link>
               </div>
-              {summary.analytics ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">今月のアクセス</span>
-                    <span className="font-semibold">{summary.analytics.monthlyUsers.toLocaleString()}</span>
+              {summary.analytics && summary.analytics.kpi && summary.analytics.ga ? (
+                <div className="space-y-6">
+                  {/* KGI/KPI Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* セッション数 KGI */}
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase">KGI</p>
+                          <p className="text-sm font-medium text-gray-900">セッション数</p>
+                        </div>
+                        <Users className="w-6 h-6 text-blue-600" />
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-4xl font-bold text-gray-900">
+                            {summary.analytics.kpi.sessions || 0}
+                          </p>
+                          <span className="text-lg text-gray-500">
+                            / {summary.analytics.kpi.targetSessions || 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* プログレスバー */}
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${(summary.analytics.kpi.sessionAchievementRate || 0) >= 80
+                                ? 'bg-green-600'
+                                : (summary.analytics.kpi.sessionAchievementRate || 0) >= 50
+                                  ? 'bg-blue-600'
+                                  : 'bg-red-600'
+                                }`}
+                              style={{
+                                width: `${Math.min(summary.analytics.kpi.sessionAchievementRate || 0, 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span className={`text-sm font-bold ${(summary.analytics.kpi.sessionAchievementRate || 0) >= 80
+                            ? 'text-green-600'
+                            : (summary.analytics.kpi.sessionAchievementRate || 0) >= 50
+                              ? 'text-blue-600'
+                              : 'text-red-600'
+                            }`}>
+                            {(summary.analytics.kpi.sessionAchievementRate || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ステータス表示 */}
+                      <div className="space-y-1">
+                        <div className="text-xs text-gray-600">
+                          🎯 目標まであと: <span className="font-bold text-gray-900">
+                            {(summary.analytics.kpi.targetSessions || 0) - (summary.analytics.kpi.sessions || 0)} セッション
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* お問い合わせ数 KPI */}
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase">KPI</p>
+                          <p className="text-sm font-medium text-gray-900">お問い合わせ数</p>
+                        </div>
+                        <AlertCircle className="w-6 h-6 text-green-600" />
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-4xl font-bold text-gray-900">
+                            {summary.analytics.kpi.inquiries || 0}
+                          </p>
+                          <span className="text-lg text-gray-500">
+                            / {summary.analytics.kpi.targetInquiries || 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* プログレスバー */}
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${(summary.analytics.kpi.inquiryAchievementRate || 0) >= 80
+                                ? 'bg-green-600'
+                                : (summary.analytics.kpi.inquiryAchievementRate || 0) >= 50
+                                  ? 'bg-yellow-600'
+                                  : 'bg-red-600'
+                                }`}
+                              style={{
+                                width: `${Math.min(summary.analytics.kpi.inquiryAchievementRate || 0, 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span className={`text-sm font-bold ${(summary.analytics.kpi.inquiryAchievementRate || 0) >= 80
+                            ? 'text-green-600'
+                            : (summary.analytics.kpi.inquiryAchievementRate || 0) >= 50
+                              ? 'text-yellow-600'
+                              : 'text-red-600'
+                            }`}>
+                            {(summary.analytics.kpi.inquiryAchievementRate || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* アラート表示 */}
+                      {(summary.analytics.kpi.inquiries || 0) === 0 ? (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                          <p className="text-xs text-yellow-800">
+                            ⚠️ お問い合わせ0件
+                          </p>
+                          <p className="text-xs text-yellow-700 mt-1">
+                            💡 GA4イベント設定を確認してください
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-600">
+                          🎯 目標まであと: <span className="font-bold text-gray-900">
+                            {(summary.analytics.kpi.targetInquiries || 0) - (summary.analytics.kpi.inquiries || 0)} 件
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* コンバージョン率 KPI */}
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase">KPI</p>
+                          <p className="text-sm font-medium text-gray-900">コンバージョン率</p>
+                        </div>
+                        <TrendingUp className="w-6 h-6 text-purple-600" />
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-4xl font-bold text-gray-900">
+                            {(summary.analytics.kpi.conversionRate || 0).toFixed(2)}%
+                          </p>
+                          <span className="text-lg text-gray-500">
+                            / {(summary.analytics.kpi.targetConversionRate || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* プログレスバー */}
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100 >= 80
+                                ? 'bg-green-600'
+                                : ((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100 >= 50
+                                  ? 'bg-yellow-600'
+                                  : 'bg-red-600'
+                                }`}
+                              style={{
+                                width: `${Math.min(
+                                  ((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100,
+                                  100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <span className={`text-sm font-bold ${((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100 >= 80
+                            ? 'text-green-600'
+                            : ((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100 >= 50
+                              ? 'text-yellow-600'
+                              : 'text-red-600'
+                            }`}>
+                            {(((summary.analytics.kpi.conversionRate || 0) / (summary.analytics.kpi.targetConversionRate || 1)) * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ステータス表示 */}
+                      {(summary.analytics.kpi.conversionRate || 0) === 0 ? (
+                        <div className="bg-red-50 border border-red-200 rounded p-2">
+                          <p className="text-xs text-red-800">
+                            🔴 コンバージョン未発生
+                          </p>
+                          <p className="text-xs text-red-700 mt-1">
+                            イベント設定を確認
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-600">
+                          🎯 目標まであと: <span className="font-bold text-gray-900">
+                            {((summary.analytics.kpi.targetConversionRate || 0) - (summary.analytics.kpi.conversionRate || 0)).toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">検索順位変動</span>
-                    <span className="font-semibold text-green-600">↑{summary.analytics.searchRankingChange}位</span>
+
+                  {/* キーワード順位テーブル */}
+                  <div className="bg-white rounded-lg shadow-sm p-6 border">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        登録済みキーワード順位
+                      </h3>
+                    </div>
+
+                    {summary.analytics.keywordRanks && summary.analytics.keywordRanks.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-2 py-2 text-left font-medium text-gray-700">
+                                キーワード
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Google<br />(PC)
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Google<br />(スマホ)
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Yahoo<br />(PC)
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Yahoo<br />(スマホ)
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Bing<br />(PC)
+                              </th>
+                              <th className="px-2 py-2 text-center font-medium text-gray-700">
+                                Bing<br />(スマホ)
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {summary.analytics.keywordRanks
+                              .filter((rank: any) =>
+                                rank.keyword === '就活情報誌' ||
+                                rank.keyword === '高校生 就職情報誌' ||
+                                rank.keyword === '東海 高校生 就職'
+                              )
+                              .map((rank: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="px-2 py-2 font-medium text-gray-900">
+                                  {rank.keyword}
+                                </td>
+                                {/* Google PC */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.googleRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.googleRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.googleRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.googleRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">圏外</span>
+                                  )}
+                                </td>
+                                {/* Google Mobile */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.googleMobileRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.googleMobileRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.googleMobileRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.googleMobileRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">-</span>
+                                  )}
+                                </td>
+                                {/* Yahoo PC */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.yahooRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.yahooRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.yahooRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.yahooRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">圏外</span>
+                                  )}
+                                </td>
+                                {/* Yahoo Mobile */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.yahooMobileRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.yahooMobileRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.yahooMobileRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.yahooMobileRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">-</span>
+                                  )}
+                                </td>
+                                {/* Bing PC */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.bingRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.bingRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.bingRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.bingRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">圏外</span>
+                                  )}
+                                </td>
+                                {/* Bing Mobile */}
+                                <td className="px-2 py-2 text-center">
+                                  {rank.bingMobileRank ? (
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-bold ${rank.bingMobileRank <= 3
+                                        ? 'bg-green-100 text-green-800'
+                                        : rank.bingMobileRank <= 10
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                    >
+                                      {rank.bingMobileRank}位
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        {summary.analytics.keywordRanks.length > 0 && summary.analytics.keywordRanks[0].updatedAt && (
+                          <p className="text-xs text-gray-500 mt-3 text-right">
+                            最終更新: {new Date(summary.analytics.keywordRanks[0].updatedAt).toLocaleString('ja-JP')}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">まだデータがありません</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* GA Metrics */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-600">アクティブユーザー</p>
+                        <Users className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {summary.analytics.ga.activeUsers || 0}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-600">セッション数</p>
+                        <Activity className="w-5 h-5 text-green-600" />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {summary.analytics.ga.sessions || 0}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-600">ページビュー</p>
+                        <Eye className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {summary.analytics.ga.screenPageViews || 0}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-600">平均セッション時間</p>
+                        <Activity className="w-5 h-5 text-orange-600" />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {Math.floor((summary.analytics.ga.averageSessionDuration || 0) / 60)}分{Math.floor((summary.analytics.ga.averageSessionDuration || 0) % 60)}秒
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm p-6 border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-600">直帰率</p>
+                        <TrendingUp className="w-5 h-5 text-red-600" />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {(summary.analytics.ga.bounceRate || 0).toFixed(2)}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* LLMO Traffic Section */}
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                      LLMO対策・流入分析
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* LLM Traffic */}
+                      <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg shadow-sm p-6 border-2 border-purple-200">
+                        <h4 className="text-sm font-semibold text-purple-900 mb-3">
+                          LLM経由の流入
+                        </h4>
+                        <div className="flex items-baseline gap-3 mb-4">
+                          <p className="text-4xl font-bold text-purple-600">
+                            {summary.analytics.llm?.totalSessions || 0}
+                          </p>
+                          <span className="text-sm text-gray-600">セッション</span>
+                        </div>
+                        {summary.analytics.llm && (summary.analytics.llm.totalSessions || 0) > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold text-purple-900 mb-1">内訳:</p>
+                            <div className="flex justify-between items-center text-sm bg-white/50 rounded px-2 py-1">
+                              <span className="text-gray-700">perplexity.ai</span>
+                              <span className="font-semibold text-purple-700">{summary.analytics.llm.perplexitySessions || 0}件</span>
+                            </div>
+                            {(summary.analytics.llm.chatGPTSessions || 0) > 0 && (
+                              <div className="flex justify-between items-center text-sm bg-white/50 rounded px-2 py-1">
+                                <span className="text-gray-700">ChatGPT</span>
+                                <span className="font-semibold text-purple-700">{summary.analytics.llm.chatGPTSessions}件</span>
+                              </div>
+                            )}
+                            {(summary.analytics.llm.geminiSessions || 0) > 0 && (
+                              <div className="flex justify-between items-center text-sm bg-white/50 rounded px-2 py-1">
+                                <span className="text-gray-700">Gemini</span>
+                                <span className="font-semibold text-purple-700">{summary.analytics.llm.geminiSessions}件</span>
+                              </div>
+                            )}
+                            {(summary.analytics.llm.claudeSessions || 0) > 0 && (
+                              <div className="flex justify-between items-center text-sm bg-white/50 rounded px-2 py-1">
+                                <span className="text-gray-700">Claude</span>
+                                <span className="font-semibold text-purple-700">{summary.analytics.llm.claudeSessions}件</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-purple-700 bg-white/50 rounded px-3 py-2">
+                            <p className="font-medium">✨ 測定準備完了</p>
+                            <p className="text-xs mt-1 text-gray-600">
+                              ChatGPT、Perplexity、Gemini等からの流入を監視中
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Search Engine Traffic */}
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-sm p-6 border-2 border-blue-200">
+                        <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                          検索エンジン別流入
+                        </h4>
+                        <div className="flex items-baseline gap-3 mb-4">
+                          <p className="text-4xl font-bold text-blue-600">
+                            {summary.analytics.searchEngines?.total || 0}
+                          </p>
+                          <span className="text-sm text-gray-600">セッション</span>
+                        </div>
+                        {summary.analytics.searchEngines && summary.analytics.searchEngines.breakdown && summary.analytics.searchEngines.breakdown.length > 0 ? (
+                          <div className="space-y-2">
+                            {summary.analytics.searchEngines.breakdown.map((engine: any, index: number) => {
+                              const total = summary.analytics.searchEngines?.total || 1;
+                              const percent = ((engine.sessions / total) * 100).toFixed(1);
+                              return (
+                                <div key={index} className="space-y-1">
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-700 capitalize">{engine.source}</span>
+                                    <span className="font-semibold text-blue-700">
+                                      {engine.sessions}件 ({percent}%)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-white/50 rounded-full h-2">
+                                    <div
+                                      className="bg-blue-500 h-2 rounded-full"
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">データがありません</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
