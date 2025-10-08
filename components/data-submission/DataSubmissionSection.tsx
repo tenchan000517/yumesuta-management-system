@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Upload, ChevronDown, ChevronUp, Music, FileText, Image, Check, X } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, Music, FileText, Image } from 'lucide-react';
 
 interface RequiredData {
   type: string;
@@ -15,6 +15,7 @@ interface Category {
   id: string;
   name: string;
   requiredData: RequiredData[];
+  deadline?: string; // Phase 3: データ提出締切
 }
 
 interface DataSubmissionSectionProps {
@@ -115,7 +116,7 @@ export function DataSubmissionSection({
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
-                カテゴリ{c.id}: {c.name}
+                {c.name}
               </option>
             ))}
           </select>
@@ -136,7 +137,7 @@ export function DataSubmissionSection({
             {' '}または ドラッグ&ドロップ
           </p>
           <p className="text-sm text-gray-500">
-            カテゴリ{selectedCategory}のデータをアップロード
+            {categories.find(c => c.id === selectedCategory)?.name || selectedCategory}のデータをアップロード
           </p>
         </div>
       </div>
@@ -194,8 +195,13 @@ export function DataSubmissionSection({
                   }`}
                 >
                   <h3 className="font-bold text-gray-900">
-                    カテゴリ{category.id}: {category.name}
+                    {category.name}
                   </h3>
+                  {category.deadline && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      締切: {category.deadline}
+                    </p>
+                  )}
                   <p
                     className={`text-sm mt-1 ${
                       hasDeadlinePassed

@@ -16,6 +16,8 @@ import {
 import { NextMonthPrepSection } from '@/components/next-month/NextMonthPrepSection';
 import { CategoryManagementSection } from '@/components/category-management/CategoryManagementSection';
 import { DataSubmissionSection } from '@/components/data-submission/DataSubmissionSection';
+import { OverallProgressSection } from '@/components/overall-progress/OverallProgressSection';
+import { CompanyManagementSection } from '@/components/company-management/CompanyManagementSection';
 
 export default function YumeMagaV2Page() {
   const [publishDate, setPublishDate] = useState('2025-11-08');
@@ -29,6 +31,10 @@ export default function YumeMagaV2Page() {
   const [summary, setSummary] = useState({ completed: 0, inProgress: 0, notStarted: 0, delayed: 0 });
   const [nextMonthProcesses, setNextMonthProcesses] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [categoryMetadata, setCategoryMetadata] = useState<any[]>([]); // Phase 1: カテゴリマスター
+  const [readyProcesses, setReadyProcesses] = useState<string[]>([]); // Phase 2: 準備OK工程
+  const [delayedProcessesMap, setDelayedProcessesMap] = useState<Record<string, number>>({}); // Phase 2: 遅延工程
+  const [companies, setCompanies] = useState<any[]>([]); // 企業セクション
   const [loading, setLoading] = useState(false);
 
   // データ取得関数
@@ -58,12 +64,8 @@ export default function YumeMagaV2Page() {
         const categoryList = Object.keys(progressData.categories).map(catId => {
           const cat = progressData.categories[catId];
 
-          // 確認送付工程の先方確認ステータスを抽出
-          cat.processes.forEach((p: any) => {
-            if (p.processName?.includes('確認送付')) {
-              newConfirmationStatus[catId] = p.confirmationStatus || '未送付';
-            }
-          });
+          // Phase 3: 確認送付ステータスをAPIレスポンスから取得
+          newConfirmationStatus[catId] = cat.confirmationStatus || '制作中';
 
           return {
             id: catId,
@@ -72,11 +74,13 @@ export default function YumeMagaV2Page() {
             completed: cat.completed,
             total: cat.total,
             canvaUrl: null,
-            confirmationRequired: ['A', 'K', 'H', 'I', 'L', 'M', 'C', 'E', 'P'].includes(catId),
+            confirmationRequired: isConfirmationRequired(catId),
+            confirmationStatus: cat.confirmationStatus || '制作中', // Phase 3: 追加
+            deadline: cat.dataSubmissionDeadline,
             processes: cat.processes.map((p: any) => ({
               id: p.processNo,
               name: p.processName,
-              plannedDate: '-',
+              plannedDate: p.plannedDate || '-',
               actualDate: p.actualDate,
               status: p.actualDate ? 'completed' : 'not_started',
             })),
@@ -94,10 +98,30 @@ export default function YumeMagaV2Page() {
         setNextMonthProcesses(nextMonthData.processes.map((p: any) => ({
           processNo: p.processNo,
           name: p.name,
-          plannedDate: '-',
+          plannedDate: p.plannedDate || '-', // ガントから取得
           actualDate: '',
           status: 'not_started' as const,
         })));
+      }
+
+      // Phase 2: 準備OK・遅延工程の取得
+      const readyRes = await fetch(`/api/yumemaga-v2/ready-processes?issue=${encodeURIComponent(selectedIssue)}`);
+      const readyData = await readyRes.json();
+      if (readyData.success) {
+        setReadyProcesses(readyData.readyProcesses.map((p: any) => p.processNo));
+
+        const delayMap: Record<string, number> = {};
+        readyData.delayedProcesses.forEach((p: any) => {
+          delayMap[p.processNo] = p.delayDays;
+        });
+        setDelayedProcessesMap(delayMap);
+      }
+
+      // 企業別工程データ取得
+      const companiesRes = await fetch(`/api/yumemaga-v2/company-processes?issue=${encodeURIComponent(selectedIssue)}`);
+      const companiesData = await companiesRes.json();
+      if (companiesData.success) {
+        setCompanies(companiesData.companies || []);
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
@@ -106,32 +130,47 @@ export default function YumeMagaV2Page() {
     }
   };
 
-  // カテゴリ名を取得
+  // Phase 1: カテゴリ名を動的に取得
   const getCategoryName = (catId: string) => {
-    const names: Record<string, string> = {
-      A: 'メインインタビュー', K: 'インタビュー②', H: 'STAR①', I: 'STAR②',
-      L: '記事L', M: '記事M', C: '新規企業', E: '既存企業',
-      P: 'パートナー一覧', Z: '全体進捗',
-    };
-    return names[catId] || catId;
+    const category = categoryMetadata.find(c => c.categoryId === catId);
+    return category?.categoryName || catId;
   };
 
-  // 必要データを取得
+  // Phase 1: 必要データを動的に取得
   const getRequiredData = (catId: string) => {
-    const data: Record<string, string[]> = {
-      A: ['録音データ', '写真データ'], K: ['録音データ', '写真データ'],
-      H: ['録音データ', '写真データ'], I: ['録音データ', '写真データ'],
-      L: ['撮影データ'], M: ['撮影データ'],
-      C: ['情報シート', '写真データ'], E: ['情報シート', '写真データ'],
-      P: ['写真データ'], Z: [],
-    };
-    return data[catId] || [];
+    const category = categoryMetadata.find(c => c.categoryId === catId);
+    if (!category || !category.requiredData) return [];
+    return category.requiredData.split(',').map((d: string) => d.trim());
   };
+
+  // Phase 1: 確認送付必須フラグを動的に取得
+  const isConfirmationRequired = (catId: string) => {
+    const category = categoryMetadata.find(c => c.categoryId === catId);
+    return category?.confirmationRequired || false;
+  };
+
+  // Phase 1: カテゴリマスター取得
+  useEffect(() => {
+    const fetchCategoryMetadata = async () => {
+      try {
+        const res = await fetch('/api/yumemaga-v2/categories');
+        const data = await res.json();
+        if (data.success) {
+          setCategoryMetadata(data.categories);
+        }
+      } catch (error) {
+        console.error('カテゴリマスター取得エラー:', error);
+      }
+    };
+    fetchCategoryMetadata();
+  }, []);
 
   // 初回データ取得
   useEffect(() => {
-    fetchAllData();
-  }, [selectedIssue]);
+    if (categoryMetadata.length > 0) {
+      fetchAllData();
+    }
+  }, [selectedIssue, categoryMetadata]);
 
   // 実績日更新ハンドラー
   const handleUpdateActualDate = async (processNo: string, date: string) => {
@@ -158,27 +197,76 @@ export default function YumeMagaV2Page() {
     }
   };
 
-  // 先方確認ステータス更新ハンドラー
-  const handleUpdateConfirmation = async (processNo: string, status: string) => {
+  // 企業ステータス更新ハンドラー
+  const handleUpdateCompanyStatus = async (companyId: string, status: string) => {
+    try {
+      const res = await fetch('/api/yumemaga-v2/company-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          status,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchAllData();
+        alert(`企業ステータスを「${status}」に更新しました`);
+      } else {
+        alert(`更新に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('企業ステータス更新エラー:', error);
+      alert('更新に失敗しました');
+    }
+  };
+
+  const handleUpdatePlannedDate = async (processNo: string, date: string) => {
+    try {
+      const res = await fetch('/api/yumemaga-v2/planned-date', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue: selectedIssue,
+          processNo,
+          plannedDate: date,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchAllData();
+        alert('予定日を更新しました');
+      } else {
+        alert(`更新に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('予定日更新エラー:', error);
+      alert('更新に失敗しました');
+    }
+  };
+
+  // Phase 3: Zセクション用の確認ステータス更新ハンドラー
+  const handleUpdateConfirmationStatus = async (categoryId: string, status: string) => {
     try {
       const res = await fetch('/api/yumemaga-v2/confirmation-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           issue: selectedIssue,
-          processNo,
+          processNo: categoryId, // カテゴリIDを送信
           status,
         }),
       });
       const data = await res.json();
       if (data.success) {
         await fetchAllData();
-        alert('先方確認ステータスを更新しました');
+        alert('確認ステータスを更新しました');
       } else {
         alert(`更新に失敗しました: ${data.error}`);
       }
     } catch (error) {
-      console.error('先方確認ステータス更新エラー:', error);
+      console.error('確認ステータス更新エラー:', error);
       alert('更新に失敗しました');
     }
   };
@@ -438,7 +526,7 @@ export default function YumeMagaV2Page() {
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-[1536px] 2xl:max-w-[1792px] mx-auto px-6 py-4">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-3 transition-colors"
@@ -453,7 +541,7 @@ export default function YumeMagaV2Page() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-[1536px] 2xl:max-w-[1792px] mx-auto px-6 py-8 space-y-8">
         {/* 新規号作成 / 月号選択 */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -562,14 +650,31 @@ export default function YumeMagaV2Page() {
           categories={categories}
           confirmationStatus={confirmationStatus}
           expandedCategory={expandedCategory}
+          readyProcesses={readyProcesses}
+          delayedProcessesMap={delayedProcessesMap}
           onSave={handleSaveProgress}
           onOpenDrive={handleOpenDrive}
           onOpenCanva={handleOpenCanva}
-          onUpdateConfirmation={handleUpdateConfirmation}
+          onUpdateConfirmation={handleUpdateConfirmationStatus}
           onToggleExpand={(categoryId) =>
             setExpandedCategory(expandedCategory === categoryId ? null : categoryId)
           }
           onUpdateActualDate={handleUpdateActualDate}
+          onUpdatePlannedDate={handleUpdatePlannedDate}
+        />
+
+        {/* Phase 3: Zセクション（全体進捗管理） */}
+        <OverallProgressSection
+          categories={categories}
+          onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
+        />
+
+        {/* 企業紹介ページ管理 */}
+        <CompanyManagementSection
+          companies={companies}
+          loading={loading}
+          onRefresh={fetchAllData}
+          onUpdateStatus={handleUpdateCompanyStatus}
         />
 
         {/* データ提出進捗管理 */}
@@ -579,8 +684,10 @@ export default function YumeMagaV2Page() {
           onCategoryChange={setSelectedCategory}
           onFileUpload={handleFileUpload}
         />
+      </div>
 
-        {/* ガントチャート（簡易版・後で実装） */}
+      {/* ガントチャート（フルワイド） */}
+      <div className="w-full px-6 mb-8">
         <div className="bg-white rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">ガントチャート（全期間）</h2>
           <div className="bg-gray-100 border border-gray-300 rounded-lg p-12 text-center">

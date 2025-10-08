@@ -29,6 +29,10 @@ export async function GET(request: Request) {
       );
     }
 
+    // ガントシートのヘッダー行（日付）を取得
+    const headers = ganttData[0];
+    const dateHeaders = headers.slice(3); // A,B,C列をスキップ
+
     // レイヤー列が "次月号" の工程を抽出
     const nextMonthProcesses = ganttData.slice(1)
       .filter(row => row[1] === '次月号') // B列: レイヤー
@@ -39,9 +43,25 @@ export async function GET(request: Request) {
         const match = processName.match(/^([A-Z]-\d+)/);
         const monthMatch = processName.match(/【(\d+月号)】/);
 
+        // 工程名から工程Noと【月号】を除去
+        // "S-1 【12月号】ゆめマガ○月号企画決定" → "ゆめマガ○月号企画決定"
+        let cleanName = processName;
+        cleanName = cleanName.replace(/^[A-Z]-\d+\s+/, ''); // 工程No除去
+        cleanName = cleanName.replace(/【\d+月号】/, '');    // 【月号】除去
+
+        // 最初の予定日を取得
+        let plannedDate = '-';
+        for (let i = 0; i < dateHeaders.length; i++) {
+          if (row[i + 3]) { // 列A,B,Cをスキップして値をチェック
+            plannedDate = dateHeaders[i];
+            break;
+          }
+        }
+
         return {
           processNo: match ? match[1] : '',
-          name: processName,
+          name: cleanName,
+          plannedDate, // ガントから取得した予定日
           nextMonthIssue: monthMatch ? `2025年${monthMatch[1]}` : '',
           layer: row[1],
           isNextMonth: true,

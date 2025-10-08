@@ -47,6 +47,66 @@ rm -rf node_modules/.cache
 
 Then ask the user to manually restart `npm run dev`.
 
+## 🧪 API Testing & Debugging
+
+### WSL Environment Limitations
+
+**CRITICAL**: In WSL environments, `localhost` hostname resolution may fail. **ALWAYS use `127.0.0.1` instead**.
+
+```bash
+# ❌ FAILS: localhost doesn't resolve in WSL
+curl "http://localhost:3000/api/endpoint"
+
+# ✅ WORKS: Use 127.0.0.1
+curl "http://127.0.0.1:3000/api/endpoint"
+```
+
+### Testing Google Sheets API Endpoints
+
+**Japanese characters MUST be URL-encoded**:
+
+```bash
+# Example: Fetch 企業マスター (Company Master) sheet
+# ❌ FAILS: Japanese characters not encoded
+curl "http://127.0.0.1:3000/api/yumemaga-sheets?sheet=企業マスター"
+
+# ✅ WORKS: URL-encoded
+curl "http://127.0.0.1:3000/api/yumemaga-sheets?sheet=%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC&limit=2"
+
+# Pretty print JSON output
+curl -s "http://127.0.0.1:3000/api/yumemaga-sheets?sheet=%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC&limit=2" | python3 -m json.tool
+```
+
+### URL Encoding Reference
+
+Common sheet names:
+- 企業マスター → `%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC`
+- 進捗入力シート → `%E9%80%B2%E6%8D%97%E5%85%A5%E5%8A%9B%E3%82%B7%E3%83%BC%E3%83%88`
+- 新工程マスター → `%E6%96%B0%E5%B7%A5%E7%A8%8B%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC`
+
+**Quick URL encode in bash**:
+```bash
+echo -n "企業マスター" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))"
+```
+
+### Debugging Slow API Responses
+
+Google Sheets API can be slow (10-20 seconds). Increase timeout:
+
+```bash
+# Set 60 second timeout
+curl -s --max-time 60 "http://127.0.0.1:3000/api/yumemaga-sheets?sheet=%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC"
+```
+
+### Verifying Data Structure
+
+Always check column count and headers first:
+
+```bash
+# Get headers only (limit=1)
+curl -s "http://127.0.0.1:3000/api/yumemaga-sheets?sheet=%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC&limit=1" | python3 -m json.tool | grep -A2 "columnCount"
+```
+
 ## Architecture
 
 ### Data Flow Pattern

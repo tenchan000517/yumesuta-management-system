@@ -171,6 +171,39 @@ export async function updateCell(
 }
 
 /**
+ * Update a single cell with support for multi-character columns (AA, AX, etc.)
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param row - Row number (1-indexed)
+ * @param col - Column number (1-indexed, e.g., 50 for AX)
+ * @param value - The value to write
+ */
+export async function updateCellExtended(
+  spreadsheetId: string,
+  sheetName: string,
+  row: number,
+  col: number,
+  value: any
+): Promise<void> {
+  const colLetter = getColumnLetter(col);
+  const range = `${sheetName}!${colLetter}${row}`;
+  await updateSheetData(spreadsheetId, range, [[value]]);
+}
+
+/**
+ * Convert column number to letter (1=A, 26=Z, 27=AA, 50=AX, etc.)
+ */
+function getColumnLetter(col: number): string {
+  let letter = '';
+  while (col > 0) {
+    const remainder = (col - 1) % 26;
+    letter = String.fromCharCode(65 + remainder) + letter;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letter;
+}
+
+/**
  * Append rows to the end of a sheet
  * @param spreadsheetId - The spreadsheet ID
  * @param sheetName - The sheet name

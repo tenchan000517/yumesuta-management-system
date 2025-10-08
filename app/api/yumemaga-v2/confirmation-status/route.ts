@@ -18,8 +18,8 @@ export async function PUT(request: Request) {
       );
     }
 
-    // ステータス値の検証
-    const validStatuses = ['未送付', '確認待ち', '確認OK', '-'];
+    // ステータス値の検証（Phase 3: 拡張ステータス対応）
+    const validStatuses = ['制作中', '内部チェック', '確認送付', '確認待ち', '確認OK', '未送付', '-'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
         { success: false, error: `無効なステータスです: ${status}` },
