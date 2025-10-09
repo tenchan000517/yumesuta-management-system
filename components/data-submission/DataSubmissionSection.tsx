@@ -601,8 +601,10 @@ export function DataSubmissionSection({
         {/* 企業モード - フォルダアイコングリッド */}
         {uploadMode === 'company' && (
           <div className="mb-4">
-            {/* 9カラムグリッド: 8フォルダ + ファイル一覧 */}
-            <div className="grid grid-cols-9 gap-4">
+            {/* フォルダグリッドとプレビューを横並び */}
+            <div className="flex gap-4">
+              {/* 左側: フォルダグリッド（8個） */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
               {/* 1. ロゴ */}
               <button
                 onClick={() => setSelectedCompanyFolder('ロゴ')}
@@ -755,8 +757,10 @@ export function DataSubmissionSection({
                 )}
               </button>
 
-              {/* 9. ファイル一覧＋プレビュー */}
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
+              </div>
+
+              {/* 右側: ファイル一覧＋プレビュー */}
+              <div className="w-full md:w-80 border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
                 {/* 左側: ファイル一覧 */}
                 <div className="flex-1">
                   {loadingFiles ? (
