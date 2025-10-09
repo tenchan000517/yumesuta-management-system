@@ -43,7 +43,7 @@ export function DataSubmissionSection({
 }: DataSubmissionSectionProps) {
   const [showCards, setShowCards] = useState(false);
   const [uploadMode, setUploadMode] = useState<UploadMode>('category');
-  const [selectedIssue, setSelectedIssue] = useState(defaultIssue); // セクション独立の月号選択
+  const [selectedIssue, setSelectedIssue] = useState(defaultIssue); // アップロード先の月号
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || 'A');
   const [selectedDataType, setSelectedDataType] = useState<DataType>('recording');
   const [companyMode, setCompanyMode] = useState<CompanyMode>('existing');
@@ -56,6 +56,12 @@ export function DataSubmissionSection({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submissionData, setSubmissionData] = useState<Category[]>(categories);
   const [loadingSubmission, setLoadingSubmission] = useState(false);
+
+  // フォルダ内ファイル一覧
+  const [folderFiles, setFolderFiles] = useState<any[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [filesExpanded, setFilesExpanded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<any | null>(null);
 
   // 月号変更時にデータ提出状況を取得
   useEffect(() => {
@@ -80,6 +86,46 @@ export function DataSubmissionSection({
 
     fetchSubmissionStatus();
   }, [selectedIssue, categories]);
+
+  // 選択されたフォルダのファイル一覧を取得
+  useEffect(() => {
+    const fetchFolderFiles = async () => {
+      if (uploadMode !== 'category' || !selectedCategory || !selectedDataType || !selectedIssue) {
+        setFolderFiles([]);
+        setSelectedFile(null); // プレビューをクリア
+        return;
+      }
+
+      setLoadingFiles(true);
+      setSelectedFile(null); // フォルダ変更時にプレビューをクリア
+      try {
+        // 月号フォーマット変換: "2025年11月号" → "2025_11"
+        const issueFormatted = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+          const paddedMonth = month.padStart(2, '0');
+          return `${year}_${paddedMonth}`;
+        });
+
+        const response = await fetch(
+          `/api/yumemaga-v2/data-submission/list-files?categoryId=${selectedCategory}&dataType=${selectedDataType}&issue=${issueFormatted}`
+        );
+        const data = await response.json();
+
+        if (data.success) {
+          setFolderFiles(data.files || []);
+        } else {
+          console.error('Failed to fetch folder files:', data.error);
+          setFolderFiles([]);
+        }
+      } catch (error) {
+        console.error('Error fetching folder files:', error);
+        setFolderFiles([]);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+
+    fetchFolderFiles();
+  }, [uploadMode, selectedCategory, selectedDataType, selectedIssue]);
 
   // 全体進捗を計算（submissionDataを使用）
   const overallProgress = useMemo(() => {
@@ -194,27 +240,9 @@ export function DataSubmissionSection({
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Upload className="w-6 h-6 text-blue-600" />
-          <h2 className="text-xl font-bold text-gray-900">データ提出進捗管理</h2>
-        </div>
-
-        {/* セクション独立の月号選択 */}
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-semibold text-gray-700">対象月号:</label>
-          <select
-            value={selectedIssue}
-            onChange={(e) => setSelectedIssue(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
-          >
-            {availableIssues.map((option) => (
-              <option key={option.issue} value={option.issue}>
-                {option.issue}{option.isNew ? ' (新)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="flex items-center gap-3 mb-6">
+        <Upload className="w-6 h-6 text-blue-600" />
+        <h2 className="text-xl font-bold text-gray-900">データ提出進捗管理</h2>
       </div>
 
       {/* 全体進捗（常に表示） */}
@@ -257,115 +285,219 @@ export function DataSubmissionSection({
 
       {/* アップロードモード選択 */}
       <div className="border border-gray-200 rounded-lg p-6 mb-6">
-        <div className="mb-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            アップロードモード
-          </label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="uploadMode"
-                value="category"
-                checked={uploadMode === 'category'}
-                onChange={(e) => setUploadMode(e.target.value as UploadMode)}
-                className="w-4 h-4"
-              />
-              <span className="text-gray-700">カテゴリ系（録音・写真・企画）</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="uploadMode"
-                value="company"
-                checked={uploadMode === 'company'}
-                onChange={(e) => setUploadMode(e.target.value as UploadMode)}
-                className="w-4 h-4"
-              />
-              <span className="text-gray-700">企業系（ロゴ・写真等）</span>
-            </label>
+        {/* タブ＆選択UI（1行） */}
+        <div className="flex items-center gap-4 mb-6">
+          {/* モード選択タブ */}
+          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setUploadMode('category')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                uploadMode === 'category'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              カテゴリ別
+            </button>
+            <button
+              onClick={() => setUploadMode('company')}
+              className={`px-4 py-2 text-sm font-medium border-l border-gray-300 transition-colors ${
+                uploadMode === 'company'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              企業別
+            </button>
           </div>
+
+          {/* カテゴリモード時の選択UI */}
+          {uploadMode === 'category' && (
+            <>
+              {/* カテゴリ選択 */}
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                {categories
+                  .filter(category => category.requiredData && category.requiredData.length > 0)
+                  .map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.id}: {category.name}
+                    </option>
+                  ))}
+              </select>
+
+              {/* 月号選択 */}
+              <select
+                value={selectedIssue}
+                onChange={(e) => setSelectedIssue(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                {availableIssues.map((option) => (
+                  <option key={option.issue} value={option.issue}>
+                    {option.issue}{option.isNew ? ' (新)' : ''}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         {/* カテゴリモード - フォルダアイコングリッド */}
         {uploadMode === 'category' && (
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              アップロード先フォルダを選択
-            </label>
 
-            {/* カテゴリごとにグループ化 */}
-            <div className="space-y-6">
-              {categories
-                .filter(category => {
-                  // 必要データがあるカテゴリのみ表示
-                  return category.requiredData && category.requiredData.length > 0;
-                })
-                .map((category) => {
-                  // カテゴリの必要データから利用可能なデータ種別を取得
-                  const availableDataTypes = category.requiredData.map(rd => {
-                    // requiredDataの名前からDataTypeを推測
-                    const name = (rd?.name || rd?.type || '').toString();
-                    if (name.includes('録音') || name.includes('音声')) return 'recording';
-                    if (name.includes('写真') || name.includes('画像')) return 'photo';
-                    if (name.includes('企画') || name.includes('資料')) return 'planning';
-                    return null;
-                  }).filter((dt): dt is DataType => dt !== null);
+            {/* ステップ2: データ種別フォルダ選択 */}
+            {selectedCategory && (() => {
+              const category = categories.find(c => c.id === selectedCategory);
+              if (!category) return null;
 
-                  // 重複を除去
-                  const uniqueDataTypes = Array.from(new Set(availableDataTypes));
+              // カテゴリの必要データから利用可能なデータ種別を取得
+              const availableDataTypes = category.requiredData.map(rd => {
+                const name = (rd?.name || rd?.type || '').toString();
+                if (name.includes('録音') || name.includes('音声')) return 'recording';
+                if (name.includes('写真') || name.includes('画像')) return 'photo';
+                if (name.includes('企画') || name.includes('資料')) return 'planning';
+                return null;
+              }).filter((dt): dt is DataType => dt !== null);
 
-                  // データ種別が検出できない場合はデフォルトで全種別を表示
-                  const dataTypesToShow = uniqueDataTypes.length > 0
-                    ? uniqueDataTypes
-                    : ['recording', 'photo', 'planning'] as DataType[];
+              const uniqueDataTypes = Array.from(new Set(availableDataTypes));
+              const dataTypesToShow = uniqueDataTypes.length > 0
+                ? uniqueDataTypes
+                : ['recording', 'photo', 'planning'] as DataType[];
 
-                  if (dataTypesToShow.length === 0) return null;
+              return (
+                <div className="grid grid-cols-4 gap-4">
+                    {/* フォルダアイコン（3カラム） */}
+                    {dataTypesToShow.map((dataType) => {
+                      const isSelected = selectedDataType === dataType;
+                      const folderName = getDataTypeFolderName(dataType);
+                      const FolderIcon = dataType === 'recording' ? Music : dataType === 'photo' ? Image : FileText;
 
-                  return (
-                    <div key={category.id} className="border border-gray-200 rounded-lg p-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">
-                        {category.id}: {category.name}
-                      </h3>
+                      return (
+                        <button
+                          key={dataType}
+                          onClick={() => setSelectedDataType(dataType)}
+                          className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-blue-300'
+                          }`}
+                        >
+                          <Folder className={`w-16 h-16 mb-2 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
+                          <FolderIcon className={`w-6 h-6 mb-2 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                          <span className={`text-sm text-center font-medium ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                            {folderName}
+                          </span>
 
-                      {/* データ種別フォルダアイコングリッド */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                        {dataTypesToShow.map((dataType) => {
-                          const isSelected = selectedCategory === category.id && selectedDataType === dataType;
-                          const folderName = getDataTypeFolderName(dataType);
-                          const FolderIcon = dataType === 'recording' ? Music : dataType === 'photo' ? Image : FileText;
+                          {/* 選択中インジケーター */}
+                          {isSelected && (
+                            <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                          )}
+                        </button>
+                      );
+                    })}
 
-                          return (
-                            <button
-                              key={dataType}
-                              onClick={() => {
-                                setSelectedCategory(category.id);
-                                setSelectedDataType(dataType);
-                              }}
-                              className={`relative flex flex-col items-center p-4 rounded-lg border-2 transition-all hover:shadow-md ${
-                                isSelected
-                                  ? 'border-blue-500 bg-blue-50 shadow-md'
-                                  : 'border-gray-200 bg-white hover:border-blue-300'
-                              }`}
-                            >
-                              <Folder className={`w-12 h-12 mb-2 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
-                              <FolderIcon className={`w-5 h-5 mb-1 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
-                              <span className={`text-xs text-center font-medium ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
-                                {folderName}
-                              </span>
+                    {/* 4カラム目: ファイルプレビュー */}
+                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
+                      {/* 左側: ファイル一覧 */}
+                      <div className="flex-1">
+                        {loadingFiles ? (
+                          <div className="text-sm text-gray-500">読込中...</div>
+                        ) : folderFiles.length > 0 ? (
+                          <div>
+                            {/* ファイルが6件以下の場合はそのまま表示 */}
+                            {folderFiles.length <= 6 ? (
+                              <div className="space-y-1.5">
+                                {folderFiles.map((file) => (
+                                  <button
+                                    key={file.id}
+                                    onClick={() => setSelectedFile(file)}
+                                    className={`block w-full text-left text-sm truncate px-2 py-1 rounded transition-colors ${
+                                      selectedFile?.id === file.id
+                                        ? 'bg-blue-100 text-blue-900 font-medium'
+                                        : 'text-gray-700 hover:bg-gray-100 hover:text-blue-600'
+                                    }`}
+                                    title={`${file.name}\n更新: ${new Date(file.modifiedTime).toLocaleString('ja-JP')}`}
+                                  >
+                                    {file.name}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              /* ファイルが7件以上の場合は折りたたみ表示 */
+                              <div>
+                                <button
+                                  onClick={() => setFilesExpanded(!filesExpanded)}
+                                  className="w-full text-left text-sm text-blue-600 hover:text-blue-800 mb-2 flex items-center gap-1"
+                                >
+                                  <ChevronDown className={`w-4 h-4 transition-transform ${filesExpanded ? 'rotate-180' : ''}`} />
+                                  {folderFiles.length}ファイル
+                                </button>
 
-                              {/* 選択中インジケーター */}
-                              {isSelected && (
-                                <div className="absolute top-2 right-2 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>
-                              )}
-                            </button>
-                          );
-                        })}
+                                {filesExpanded && (
+                                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                                    {folderFiles.map((file) => (
+                                      <button
+                                        key={file.id}
+                                        onClick={() => setSelectedFile(file)}
+                                        className={`block w-full text-left text-sm truncate px-2 py-1 rounded transition-colors ${
+                                          selectedFile?.id === file.id
+                                            ? 'bg-blue-100 text-blue-900 font-medium'
+                                            : 'text-gray-700 hover:bg-gray-100 hover:text-blue-600'
+                                        }`}
+                                        title={`${file.name}\n更新: ${new Date(file.modifiedTime).toLocaleString('ja-JP')}`}
+                                      >
+                                        {file.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 text-center">ファイルなし</p>
+                        )}
                       </div>
+
+                      {/* 右側: プレビューエリア */}
+                      {selectedFile && (
+                        <div className="w-40 border-l border-gray-300 pl-3 flex flex-col">
+                          <a
+                            href={selectedFile.webViewLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex flex-col items-center justify-center gap-2 p-2 rounded hover:bg-gray-100 transition-colors group"
+                            title="Google Driveで開く"
+                          >
+                            {/* ファイルタイプ別アイコン */}
+                            {selectedFile.mimeType?.startsWith('image/') ? (
+                              <Image className="w-12 h-12 text-blue-500 group-hover:text-blue-600" />
+                            ) : selectedFile.mimeType?.startsWith('audio/') ? (
+                              <Music className="w-12 h-12 text-green-500 group-hover:text-green-600" />
+                            ) : selectedFile.mimeType === 'application/pdf' ? (
+                              <FileText className="w-12 h-12 text-red-500 group-hover:text-red-600" />
+                            ) : (
+                              <FileText className="w-12 h-12 text-gray-500 group-hover:text-gray-600" />
+                            )}
+
+                            <div className="text-xs text-center text-gray-600 group-hover:text-blue-600 break-all">
+                              {selectedFile.name}
+                            </div>
+
+                            <div className="text-xs text-gray-400 group-hover:text-blue-500">
+                              クリックで開く
+                            </div>
+                          </a>
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* 選択中の情報を表示 */}
             {selectedCategory && selectedDataType && (

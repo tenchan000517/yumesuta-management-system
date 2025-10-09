@@ -326,6 +326,28 @@ export async function ensureDirectoryWithOAuth(
 }
 
 /**
+ * OAuth認証を使って指定フォルダ内のファイル一覧を取得
+ */
+export async function listFilesInFolderWithOAuth(folderId: string) {
+  const drive = await getAuthenticatedDriveClient();
+
+  try {
+    const response = await drive.files.list({
+      q: `'${folderId}' in parents and trashed=false`,
+      fields: 'files(id, name, mimeType, size, modifiedTime, webViewLink)',
+      orderBy: 'modifiedTime desc',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    return response.data.files || [];
+  } catch (error: any) {
+    console.error('Google Drive API error (listFilesInFolderWithOAuth):', error);
+    throw new Error(`Failed to list files in folder ${folderId}: ${error.message}`);
+  }
+}
+
+/**
  * OAuth認証を使って指定フォルダ内で名前からフォルダを検索
  */
 async function findFolderByNameWithOAuth(

@@ -68,6 +68,21 @@ export default function YumeMagaV2Page() {
           // Phase 3: 確認送付ステータスをAPIレスポンスから取得
           newConfirmationStatus[catId] = cat.confirmationStatus || '制作中';
 
+          // requiredDataをオブジェクト配列に変換
+          const categoryMeta = categoryMetadata.find(c => c.categoryId === catId);
+          const requiredDataArray = categoryMeta?.requiredData
+            ? categoryMeta.requiredData.split(',').map((dataName: string) => {
+                const trimmedName = dataName.trim();
+                return {
+                  type: trimmedName,
+                  name: trimmedName,
+                  status: 'pending', // TODO: Phase 8.3で実際の提出状況を取得
+                  deadline: cat.dataSubmissionDeadline || '',
+                  optional: false,
+                };
+              })
+            : [];
+
           return {
             id: catId,
             name: getCategoryName(catId),
@@ -85,7 +100,7 @@ export default function YumeMagaV2Page() {
               actualDate: p.actualDate,
               status: p.actualDate ? 'completed' : 'not_started',
             })),
-            requiredData: getRequiredData(catId),
+            requiredData: requiredDataArray,
           };
         });
         setCategories(categoryList);
