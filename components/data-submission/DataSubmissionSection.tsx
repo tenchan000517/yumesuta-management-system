@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Upload, ChevronDown, ChevronUp, Music, FileText, Image, Building2 } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, Music, FileText, Image, Folder } from 'lucide-react';
 import type { DataType, UploadMode, CompanyMode, CompanyFolderType } from '@/types/data-submission';
 
 interface RequiredData {
@@ -287,70 +287,96 @@ export function DataSubmissionSection({
           </div>
         </div>
 
-        {/* カテゴリモード */}
+        {/* カテゴリモード - フォルダアイコングリッド */}
         {uploadMode === 'category' && (
-          <>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                カテゴリを選択
-              </label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.id}: {c.name}
-                  </option>
-                ))}
-              </select>
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              アップロード先フォルダを選択
+            </label>
+
+            {/* カテゴリごとにグループ化 */}
+            <div className="space-y-6">
+              {categories
+                .filter(category => {
+                  // 必要データがあるカテゴリのみ表示
+                  return category.requiredData && category.requiredData.length > 0;
+                })
+                .map((category) => {
+                  // カテゴリの必要データから利用可能なデータ種別を取得
+                  const availableDataTypes = category.requiredData.map(rd => {
+                    // requiredDataの名前からDataTypeを推測
+                    const name = (rd?.name || rd?.type || '').toString();
+                    if (name.includes('録音') || name.includes('音声')) return 'recording';
+                    if (name.includes('写真') || name.includes('画像')) return 'photo';
+                    if (name.includes('企画') || name.includes('資料')) return 'planning';
+                    return null;
+                  }).filter((dt): dt is DataType => dt !== null);
+
+                  // 重複を除去
+                  const uniqueDataTypes = Array.from(new Set(availableDataTypes));
+
+                  // データ種別が検出できない場合はデフォルトで全種別を表示
+                  const dataTypesToShow = uniqueDataTypes.length > 0
+                    ? uniqueDataTypes
+                    : ['recording', 'photo', 'planning'] as DataType[];
+
+                  if (dataTypesToShow.length === 0) return null;
+
+                  return (
+                    <div key={category.id} className="border border-gray-200 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-900 mb-3">
+                        {category.id}: {category.name}
+                      </h3>
+
+                      {/* データ種別フォルダアイコングリッド */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {dataTypesToShow.map((dataType) => {
+                          const isSelected = selectedCategory === category.id && selectedDataType === dataType;
+                          const folderName = getDataTypeFolderName(dataType);
+                          const FolderIcon = dataType === 'recording' ? Music : dataType === 'photo' ? Image : FileText;
+
+                          return (
+                            <button
+                              key={dataType}
+                              onClick={() => {
+                                setSelectedCategory(category.id);
+                                setSelectedDataType(dataType);
+                              }}
+                              className={`relative flex flex-col items-center p-4 rounded-lg border-2 transition-all hover:shadow-md ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                                  : 'border-gray-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <Folder className={`w-12 h-12 mb-2 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} />
+                              <FolderIcon className={`w-5 h-5 mb-1 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                              <span className={`text-xs text-center font-medium ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                                {folderName}
+                              </span>
+
+                              {/* 選択中インジケーター */}
+                              {isSelected && (
+                                <div className="absolute top-2 right-2 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                データ種別を選択
-              </label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="dataType"
-                    value="recording"
-                    checked={selectedDataType === 'recording'}
-                    onChange={(e) => setSelectedDataType(e.target.value as DataType)}
-                    className="w-4 h-4"
-                  />
-                  <Music className="w-4 h-4" />
-                  <span className="text-gray-700">録音データ (.mp3, .wav等)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="dataType"
-                    value="photo"
-                    checked={selectedDataType === 'photo'}
-                    onChange={(e) => setSelectedDataType(e.target.value as DataType)}
-                    className="w-4 h-4"
-                  />
-                  <Image className="w-4 h-4" />
-                  <span className="text-gray-700">写真データ (.jpg, .png等)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="dataType"
-                    value="planning"
-                    checked={selectedDataType === 'planning'}
-                    onChange={(e) => setSelectedDataType(e.target.value as DataType)}
-                    className="w-4 h-4"
-                  />
-                  <FileText className="w-4 h-4" />
-                  <span className="text-gray-700">企画内容 (.docx, .pdf等)</span>
-                </label>
+            {/* 選択中の情報を表示 */}
+            {selectedCategory && selectedDataType && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <span className="font-semibold">選択中:</span>{' '}
+                  {categories.find(c => c.id === selectedCategory)?.name} / {getDataTypeFolderName(selectedDataType)} / {selectedIssue}
+                </p>
               </div>
-            </div>
-          </>
+            )}
+          </div>
         )}
 
         {/* 企業モード */}
