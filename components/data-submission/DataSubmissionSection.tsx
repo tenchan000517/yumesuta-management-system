@@ -760,7 +760,7 @@ export function DataSubmissionSection({
               </div>
 
               {/* 右側: ファイル一覧＋プレビュー */}
-              <div className="w-full md:w-80 border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
+              <div className="w-full md:flex-1 border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
                 {/* 左側: ファイル一覧 */}
                 <div className="flex-1">
                   {loadingFiles ? (
@@ -822,7 +822,7 @@ export function DataSubmissionSection({
 
                 {/* 右側: プレビューエリア */}
                 {selectedFile && (
-                  <div className="w-40 border-l border-gray-300 pl-3 flex flex-col">
+                  <div className="w-80 border-l border-gray-300 pl-3 flex flex-col">
                     <a
                       href={selectedFile.webViewLink}
                       target="_blank"

@@ -732,7 +732,7 @@ export default function YumeMagaV2Page() {
         {/* データ提出進捗管理 */}
         <DataSubmissionSection
           categories={categories}
-          companies={companies}
+          companies={companies.map(c => ({ name: c.companyName }))}
           availableIssues={issues}
           defaultIssue={selectedIssue}
         />

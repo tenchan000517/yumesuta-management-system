@@ -120,23 +120,31 @@ async function handleCompanyMode(searchParams: URLSearchParams) {
     );
   }
 
-  // TODO: 企業素材のルートフォルダIDを環境変数から取得
-  // 暫定的にGoogle Drive APIで「企業素材」フォルダを検索
-  const rootFolderPath = ['企業素材', companyName, folderType];
+  const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-  // フォルダIDを解決（存在しなければ作成）
-  // ルートフォルダIDが不明な場合は、環境変数で指定する必要がある
-  const companyRootFolderId = process.env.COMPANY_DATA_ROOT_FOLDER_ID || '';
+  // カテゴリマスターからCカテゴリのDriveフォルダIDを取得
+  const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
+  const categoryRow = categoryData.find((row: any[]) => row[0] === 'C');
 
-  if (!companyRootFolderId) {
+  if (!categoryRow) {
     return NextResponse.json(
-      { success: false, error: 'COMPANY_DATA_ROOT_FOLDER_ID environment variable not set' },
-      { status: 500 }
+      { success: false, error: 'Category C not found' },
+      { status: 404 }
     );
   }
 
+  const driveFolderId = categoryRow[9]; // J列: DriveフォルダID
+
+  if (!driveFolderId) {
+    return NextResponse.json(
+      { success: false, error: 'DriveフォルダID not set for category C' },
+      { status: 400 }
+    );
+  }
+
+  // ディレクトリパス: ["企業名", "フォルダ種別"]
   const pathSegments = [companyName, folderType];
-  const targetFolderId = await ensureDirectoryWithOAuth(companyRootFolderId, pathSegments);
+  const targetFolderId = await ensureDirectoryWithOAuth(driveFolderId, pathSegments);
 
   // ファイル一覧を取得
   const files = await listFilesInFolderWithOAuth(targetFolderId);
