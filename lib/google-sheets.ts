@@ -355,3 +355,98 @@ export async function deleteRows(
     throw error;
   }
 }
+
+/**
+ * Update a single sheet cell by cell address (e.g., "G5")
+ * Phase 8.2 helper function for updating process completion dates
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param cellAddress - Cell address (e.g., "G5", "AX10")
+ * @param value - The value to write
+ */
+export async function updateSheetCell(
+  spreadsheetId: string,
+  sheetName: string,
+  cellAddress: string,
+  value: string
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!${cellAddress}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[value]],
+      },
+    });
+
+    console.log(`✅ Updated cell ${sheetName}!${cellAddress} with value: ${value}`);
+  } catch (error) {
+    console.error(`Failed to update cell ${sheetName}!${cellAddress}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Append a single row to a sheet (Phase 8.4 helper)
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param rowData - Array of values for the row
+ */
+export async function appendSheetRow(
+  spreadsheetId: string,
+  sheetName: string,
+  rowData: any[]
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${sheetName}!A:AY`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [rowData],
+      },
+    });
+
+    console.log(`✅ Appended 1 row to ${sheetName}`);
+  } catch (error) {
+    console.error(`Failed to append row to ${sheetName}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Update a specific row in a sheet (Phase 8.4 helper)
+ * @param spreadsheetId - The spreadsheet ID
+ * @param sheetName - The sheet name
+ * @param rowNumber - Row number (1-indexed)
+ * @param rowData - Array of values for the row
+ */
+export async function updateSheetRow(
+  spreadsheetId: string,
+  sheetName: string,
+  rowNumber: number,
+  rowData: any[]
+): Promise<void> {
+  try {
+    const sheets = getGoogleSheetsClient();
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!A${rowNumber}:AY${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [rowData],
+      },
+    });
+
+    console.log(`✅ Updated row ${rowNumber} in ${sheetName}`);
+  } catch (error) {
+    console.error(`Failed to update row ${rowNumber} in ${sheetName}:`, error);
+    throw error;
+  }
+}

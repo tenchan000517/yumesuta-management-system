@@ -18,6 +18,8 @@ interface CompanyField {
   required: boolean;
 }
 
+type CompanyFolderType = 'ロゴ' | 'ヒーロー画像' | 'QRコード' | '代表者写真' | 'サービス画像' | '社員写真' | '情報シート' | 'その他';
+
 interface Company {
   companyId: string;
   companyName: string;
@@ -32,11 +34,13 @@ interface Company {
     textColor: string;
   };
   progress: {
-    total: number;
-    completed: number;
-    inProgress: number;
-    notStarted: number;
-    progressRate: number;
+    masterSheet: {
+      total: number;
+      filled: number;
+      notFilled: number;
+      progressRate: number;
+    };
+    fileUpload: Record<CompanyFolderType, { uploaded: boolean; fileCount: number }>;
   };
   fields: CompanyField[];
 }
@@ -151,33 +155,33 @@ export function CompanyCard({
           </div>
         </div>
 
-        {/* 進捗バー */}
+        {/* 企業マスター進捗バー */}
         <div className="mb-2">
           <div className="flex items-center justify-between text-sm mb-1">
-            <span className="text-gray-700 font-semibold">進捗: {company.progress.progressRate}%</span>
-            <span className="text-gray-500">{company.progress.completed}/{company.progress.total}工程</span>
+            <span className="text-gray-700 font-semibold">企業マスター: {company.progress.masterSheet.progressRate}%</span>
+            <span className="text-gray-500">{company.progress.masterSheet.filled}/{company.progress.masterSheet.total}列</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all"
-              style={{ width: `${company.progress.progressRate}%` }}
+              style={{ width: `${company.progress.masterSheet.progressRate}%` }}
             />
           </div>
         </div>
 
-        {/* 工程サマリー */}
-        <div className="flex items-center gap-4 text-sm text-gray-600">
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span>完了: {company.progress.completed}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full" />
-            <span>進行中: {company.progress.inProgress}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full" />
-            <span>未着手: {company.progress.notStarted}</span>
+        {/* ファイルアップロード状況 */}
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <h4 className="text-xs font-semibold text-gray-700 mb-2">ファイルアップロード状況</h4>
+          <div className="grid grid-cols-2 gap-1 text-xs">
+            {Object.entries(company.progress.fileUpload).map(([folderType, status]) => (
+              <div key={folderType} className="flex items-center gap-1">
+                <span className={status.uploaded ? "text-green-600" : "text-gray-400"}>
+                  {status.uploaded ? "✅" : "⬜"}
+                </span>
+                <span className="text-gray-700">{folderType}</span>
+                <span className="text-gray-500">({status.fileCount})</span>
+              </div>
+            ))}
           </div>
         </div>
 

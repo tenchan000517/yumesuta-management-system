@@ -12,6 +12,7 @@ import {
   Play,
   FileText,
   Trash2,
+  Building2,
 } from 'lucide-react';
 import { NextMonthPrepSection } from '@/components/next-month/NextMonthPrepSection';
 import { CategoryManagementSection } from '@/components/category-management/CategoryManagementSection';
@@ -728,6 +729,23 @@ export default function YumeMagaV2Page() {
           onRefresh={fetchAllData}
           onUpdateStatus={handleUpdateCompanyStatus}
         />
+
+        {/* 企業情報入力フォームリンク */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Building2 className="w-6 h-6 text-blue-600" />
+            企業情報管理
+          </h2>
+          <p className="text-gray-600 mb-4">
+            企業マスターに新規企業を登録、または既存企業の情報を編集できます。
+          </p>
+          <Link href="/dashboard/yumemaga-v2/company-form">
+            <button className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-semibold transition-colors">
+              <Building2 className="w-5 h-5" />
+              企業情報入力フォームを開く
+            </button>
+          </Link>
+        </div>
 
         {/* データ提出進捗管理 */}
         <DataSubmissionSection

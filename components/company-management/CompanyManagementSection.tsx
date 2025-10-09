@@ -13,6 +13,8 @@ interface CompanyField {
   required: boolean;
 }
 
+type CompanyFolderType = 'ロゴ' | 'ヒーロー画像' | 'QRコード' | '代表者写真' | 'サービス画像' | '社員写真' | '情報シート' | 'その他';
+
 interface Company {
   companyId: string;
   companyName: string;
@@ -27,11 +29,13 @@ interface Company {
     textColor: string;
   };
   progress: {
-    total: number;
-    completed: number;
-    inProgress: number;
-    notStarted: number;
-    progressRate: number;
+    masterSheet: {
+      total: number;
+      filled: number;
+      notFilled: number;
+      progressRate: number;
+    };
+    fileUpload: Record<CompanyFolderType, { uploaded: boolean; fileCount: number }>;
   };
   fields: CompanyField[];
 }
@@ -83,7 +87,7 @@ export function CompanyManagementSection({
     updated: companies.filter(c => c.status === 'updated').length,
     existing: companies.filter(c => c.status === 'existing').length,
     avgProgress: companies.length > 0
-      ? Math.round(companies.reduce((sum, c) => sum + c.progress.progressRate, 0) / companies.length)
+      ? Math.round(companies.reduce((sum, c) => sum + c.progress.masterSheet.progressRate, 0) / companies.length)
       : 0,
   };
 

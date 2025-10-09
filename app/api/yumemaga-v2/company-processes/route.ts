@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
+import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
+
+type CompanyFolderType = 'ロゴ' | 'ヒーロー画像' | 'QRコード' | '代表者写真' | 'サービス画像' | '社員写真' | '情報シート' | 'その他';
 
 /**
  * 企業別工程管理API
@@ -264,8 +267,29 @@ export async function GET(request: Request) {
 
     console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュール取得`);
 
+    // 3.5. カテゴリC（企業情報）のDriveフォルダID取得
+    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
+    const categoryCRow = categoryData.find((row: any[]) => row[0] === 'C');
+    const categoryCDriveId = categoryCRow ? categoryCRow[9] : null;
+
+    if (!categoryCDriveId) {
+      console.warn('⚠️ カテゴリCのDriveフォルダIDが見つかりません。ファイルアップロード状況の取得をスキップします。');
+    }
+
+    // 企業フォルダの種別定義
+    const COMPANY_FOLDER_TYPES: CompanyFolderType[] = [
+      'ロゴ',
+      'ヒーロー画像',
+      'QRコード',
+      '代表者写真',
+      'サービス画像',
+      '社員写真',
+      '情報シート',
+      'その他',
+    ];
+
     // 4. 各企業の工程を抽出
-    const companiesWithProcesses = companies.map(company => {
+    const companiesWithProcesses = await Promise.all(companies.map(async (company) => {
       const companyStatus = getCompanyStatus(company, issue);
 
       // 今号非掲載の企業はスキップ
@@ -325,6 +349,38 @@ export async function GET(request: Request) {
         required: field.required,
       }));
 
+      // ファイルアップロード状況を取得（Phase 8.3）
+      const fileUpload: Record<CompanyFolderType, { uploaded: boolean; fileCount: number }> = {} as any;
+
+      if (categoryCDriveId) {
+        for (const folderType of COMPANY_FOLDER_TYPES) {
+          try {
+            // パス: カテゴリC_DriveID/企業名/フォルダ種別/
+            const folderPath = await ensureDirectoryWithOAuth(categoryCDriveId, [company.companyName, folderType]);
+            const files = await listFilesInFolderWithOAuth(folderPath);
+
+            fileUpload[folderType] = {
+              uploaded: files.length > 0,
+              fileCount: files.length,
+            };
+          } catch (error) {
+            console.error(`❌ Error checking ${company.companyName}/${folderType}:`, error);
+            fileUpload[folderType] = {
+              uploaded: false,
+              fileCount: 0,
+            };
+          }
+        }
+      } else {
+        // カテゴリCのDriveフォルダIDがない場合は全て0で初期化
+        for (const folderType of COMPANY_FOLDER_TYPES) {
+          fileUpload[folderType] = {
+            uploaded: false,
+            fileCount: 0,
+          };
+        }
+      }
+
       return {
         companyId: company.companyId,
         companyName: company.companyName,
@@ -335,17 +391,19 @@ export async function GET(request: Request) {
         statusDescription: companyStatus.description,
         statusBadge: companyStatus.badge,
         progress: {
-          total: masterProgress.total,
-          completed: masterProgress.filled,
-          inProgress: masterProgress.notFilled,
-          notStarted: 0,
-          progressRate: masterProgress.progressRate,
+          masterSheet: {
+            total: masterProgress.total,
+            filled: masterProgress.filled,
+            notFilled: masterProgress.notFilled,
+            progressRate: masterProgress.progressRate,
+          },
+          fileUpload, // Phase 8.3: ファイルアップロード状況
         },
         fields, // 51列フィールドの詳細情報
         processProgress, // 参考: 工程の進捗
         processes: companyProcesses,
       };
-    }).filter(c => c !== null);
+    })).then(results => results.filter(c => c !== null));
 
     console.log(`✅ 企業別工程: ${companiesWithProcesses.length}社の進捗を返却`);
 

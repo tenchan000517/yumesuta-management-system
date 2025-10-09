@@ -56,6 +56,13 @@ export function DataSubmissionSection({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submissionData, setSubmissionData] = useState<Category[]>(categories);
   const [loadingSubmission, setLoadingSubmission] = useState(false);
+  const [overallProgress, setOverallProgress] = useState<{
+    submitted: number;
+    pending: number;
+    none: number;
+    total: number;
+    progress: number;
+  } | null>(null);
 
   // フォルダ内ファイル一覧
   const [folderFiles, setFolderFiles] = useState<any[]>([]);
@@ -68,17 +75,25 @@ export function DataSubmissionSection({
     const fetchSubmissionStatus = async () => {
       setLoadingSubmission(true);
       try {
-        // TODO: Phase 8.3で実装予定
-        // const response = await fetch(`/api/yumemaga-v2/data-submission?issue=${encodeURIComponent(selectedIssue)}`);
-        // const result = await response.json();
-        // if (result.success) {
-        //   setSubmissionData(result.categories);
-        // }
+        // データ提出状況API呼び出し
+        const statusResponse = await fetch(
+          `/api/yumemaga-v2/data-submission/status?issue=${encodeURIComponent(selectedIssue)}`
+        );
+        const statusResult = await statusResponse.json();
 
-        // 暫定: 既存のカテゴリデータを使用
-        setSubmissionData(categories);
+        if (statusResult.success) {
+          setSubmissionData(statusResult.categories);
+          // 全体進捗を更新
+          setOverallProgress(statusResult.summary);
+        } else {
+          console.error('Failed to fetch submission status:', statusResult.error);
+          // エラー時は既存データを使用
+          setSubmissionData(categories);
+        }
       } catch (error) {
         console.error('Failed to fetch submission status:', error);
+        // エラー時は既存データを使用
+        setSubmissionData(categories);
       } finally {
         setLoadingSubmission(false);
       }
@@ -163,8 +178,8 @@ export function DataSubmissionSection({
     fetchFolderFiles();
   }, [uploadMode, selectedCategory, selectedDataType, selectedIssue, companyMode, selectedCompany, newCompanyName, selectedCompanyFolder]);
 
-  // 全体進捗を計算（submissionDataを使用）
-  const overallProgress = useMemo(() => {
+  // フォールバック用の進捗計算（overallProgressがnullの場合）
+  const computedProgress = useMemo(() => {
     const allData = submissionData.flatMap(c => c.requiredData);
     const submitted = allData.filter(d => d.status === 'submitted').length;
     const pending = allData.filter(d => d.status === 'pending').length;
@@ -174,6 +189,9 @@ export function DataSubmissionSection({
 
     return { progress, submitted, pending, none, total };
   }, [submissionData]);
+
+  // 実際に表示する進捗（APIからの値 or 計算値）
+  const displayProgress = overallProgress || computedProgress;
 
   const getDataTypeIcon = (type: string) => {
     switch (type) {
@@ -232,7 +250,41 @@ export function DataSubmissionSection({
 
       if (result.success) {
         alert(`アップロード成功: ${result.uploadedFiles.length}件のファイルがアップロードされました`);
-        // TODO: データ提出状況を再取得してUIを更新
+
+        // 工程完了API呼び出し（カテゴリモードのみ）
+        if (uploadMode === 'category' && selectedCategory && selectedDataType) {
+          try {
+            const completeRes = await fetch('/api/yumemaga-v2/data-submission/complete-process', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                issue: selectedIssue,
+                categoryId: selectedCategory,
+                dataType: selectedDataType,
+              }),
+            });
+            const completeData = await completeRes.json();
+
+            if (completeData.success && completeData.completedProcesses.length > 0) {
+              alert(`✅ ${completeData.message}\n工程が自動完了しました`);
+            }
+          } catch (error) {
+            console.error('工程完了API呼び出しエラー:', error);
+            // エラーでもアップロード自体は成功しているのでアラート不要
+          }
+        }
+
+        // データ提出状況を再取得してUIを更新
+        if (uploadMode === 'category') {
+          const statusResponse = await fetch(
+            `/api/yumemaga-v2/data-submission/status?issue=${encodeURIComponent(selectedIssue)}`
+          );
+          const statusResult = await statusResponse.json();
+          if (statusResult.success) {
+            setSubmissionData(statusResult.categories);
+            setOverallProgress(statusResult.summary);
+          }
+        }
       } else {
         alert(`アップロード失敗: ${result.error}`);
       }
@@ -288,11 +340,11 @@ export function DataSubmissionSection({
           <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
             <div
               className="bg-blue-500 h-4 rounded-full transition-all duration-300"
-              style={{ width: `${overallProgress.progress}%` }}
+              style={{ width: `${displayProgress.progress}%` }}
             />
           </div>
           <span className="font-bold text-lg whitespace-nowrap">
-            {overallProgress.submitted}/{overallProgress.total} ({overallProgress.progress}%)
+            {displayProgress.submitted}/{displayProgress.total} ({displayProgress.progress}%)
           </span>
         </div>
 
@@ -301,19 +353,19 @@ export function DataSubmissionSection({
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-green-500"></span>
             <span className="text-gray-600">
-              提出済み: <span className="font-semibold text-gray-900">{overallProgress.submitted}件</span>
+              提出済み: <span className="font-semibold text-gray-900">{displayProgress.submitted}件</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-red-500"></span>
             <span className="text-gray-600">
-              未提出: <span className="font-semibold text-gray-900">{overallProgress.pending}件</span>
+              未提出: <span className="font-semibold text-gray-900">{displayProgress.pending}件</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-gray-400"></span>
             <span className="text-gray-600">
-              任意未提出: <span className="font-semibold text-gray-900">{overallProgress.none}件</span>
+              任意未提出: <span className="font-semibold text-gray-900">{displayProgress.none}件</span>
             </span>
           </div>
         </div>
