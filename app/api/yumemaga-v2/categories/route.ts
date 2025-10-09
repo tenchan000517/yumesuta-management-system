@@ -9,8 +9,8 @@ export async function GET() {
   try {
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // カテゴリマスター取得
-    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:I100');
+    // カテゴリマスター取得（J列のDriveフォルダIDも含む）
+    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:J100');
 
     if (categoryData.length === 0) {
       return NextResponse.json(
@@ -30,6 +30,7 @@ export async function GET() {
       icon: row[6] || '',            // G列: アイコン
       colorTheme: row[7] || 'gray',  // H列: 色テーマ
       status: row[8] || 'active',    // I列: ステータス
+      driveFolderId: row[9] || '',   // J列: DriveフォルダID
     })).filter(cat => cat.status === 'active' && cat.categoryId); // アクティブなカテゴリのみ
 
     // 表示順でソート

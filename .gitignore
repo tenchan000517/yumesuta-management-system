@@ -39,6 +39,9 @@ yarn-error.log*
 !package-lock.json
 !tsconfig.json
 
+# OAuth tokens (NEVER commit these!)
+.oauth-tokens.json
+
 # vercel
 .vercel
 

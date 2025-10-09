@@ -27,7 +27,7 @@ export default function YumeMagaV2Page() {
   const [confirmationStatus, setConfirmationStatus] = useState<Record<string, string>>({});
 
   // APIから取得したデータ
-  const [issues, setIssues] = useState<string[]>([]);
+  const [issues, setIssues] = useState<Array<{ issue: string; isNew: boolean }>>([]);
   const [summary, setSummary] = useState({ completed: 0, inProgress: 0, notStarted: 0, delayed: 0 });
   const [nextMonthProcesses, setNextMonthProcesses] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -36,6 +36,7 @@ export default function YumeMagaV2Page() {
   const [delayedProcessesMap, setDelayedProcessesMap] = useState<Record<string, number>>({}); // Phase 2: 遅延工程
   const [companies, setCompanies] = useState<any[]>([]); // 企業セクション
   const [loading, setLoading] = useState(false);
+  const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null);
 
   // データ取得関数
   const fetchAllData = async () => {
@@ -149,6 +150,13 @@ export default function YumeMagaV2Page() {
     return category?.confirmationRequired || false;
   };
 
+  // OAuth認証状態チェック
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then(res => res.json())
+      .then(setAuthStatus);
+  }, []);
+
   // Phase 1: カテゴリマスター取得
   useEffect(() => {
     const fetchCategoryMetadata = async () => {
@@ -163,6 +171,22 @@ export default function YumeMagaV2Page() {
       }
     };
     fetchCategoryMetadata();
+  }, []);
+
+  // 利用可能な月号を取得
+  useEffect(() => {
+    const fetchAvailableIssues = async () => {
+      try {
+        const res = await fetch('/api/yumemaga-v2/available-issues');
+        const data = await res.json();
+        if (data.success) {
+          setIssues(data.issues);
+        }
+      } catch (error) {
+        console.error('月号一覧取得エラー:', error);
+      }
+    };
+    fetchAvailableIssues();
   }, []);
 
   // 初回データ取得
@@ -433,13 +457,6 @@ export default function YumeMagaV2Page() {
     alert('実績データを保存します（バックエンド未実装）');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      alert(`${files.length}件のファイルをアップロードします（バックエンド未実装）`);
-    }
-  };
-
   const handleOpenDrive = (categoryId: string) => {
     alert(`Googleドライブ: /ゆめマガ/${selectedIssue}/カテゴリ${categoryId}/ を開きます（バックエンド未実装）`);
   };
@@ -542,6 +559,26 @@ export default function YumeMagaV2Page() {
       </div>
 
       <div className="max-w-[1536px] 2xl:max-w-[1792px] mx-auto px-6 py-8 space-y-8">
+        {/* OAuth認証バナー */}
+        {authStatus && !authStatus.authenticated && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-800 font-medium">⚠️ Google Drive認証が必要です</p>
+                <p className="text-yellow-700 text-sm mt-1">
+                  ファイルアップロード機能を使用するには、Google Driveへのアクセスを許可してください。
+                </p>
+              </div>
+              <a
+                href="/api/auth/google"
+                className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors whitespace-nowrap"
+              >
+                認証する
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* 新規号作成 / 月号選択 */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -680,9 +717,9 @@ export default function YumeMagaV2Page() {
         {/* データ提出進捗管理 */}
         <DataSubmissionSection
           categories={categories}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          onFileUpload={handleFileUpload}
+          companies={companies}
+          availableIssues={issues}
+          defaultIssue={selectedIssue}
         />
       </div>
 
