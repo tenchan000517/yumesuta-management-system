@@ -1,78 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
 import { listFilesInFolderWithOAuth, ensureDirectoryWithOAuth } from '@/lib/google-drive';
-import type { DataType } from '@/types/data-submission';
+import type { DataType, CompanyFolderType } from '@/types/data-submission';
 
 /**
  * フォルダ内ファイル一覧取得API
- * GET /api/yumemaga-v2/data-submission/list-files?categoryId=A&dataType=recording&issue=2025_11
+ * カテゴリモード: GET /api/yumemaga-v2/data-submission/list-files?categoryId=A&dataType=recording&issue=2025_11
+ * 企業モード: GET /api/yumemaga-v2/data-submission/list-files?companyName=マルトモ&folderType=ロゴ
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+
+    // カテゴリモード or 企業モード判定
     const categoryId = searchParams.get('categoryId');
-    const dataType = searchParams.get('dataType') as DataType;
-    const issue = searchParams.get('issue'); // "2025_11"
+    const companyName = searchParams.get('companyName');
 
-    // バリデーション
-    if (!categoryId || !dataType || !issue) {
+    if (categoryId) {
+      // カテゴリモード
+      return await handleCategoryMode(searchParams);
+    } else if (companyName) {
+      // 企業モード
+      return await handleCompanyMode(searchParams);
+    } else {
       return NextResponse.json(
-        { success: false, error: 'categoryId, dataType, and issue are required' },
+        { success: false, error: 'Either categoryId or companyName is required' },
         { status: 400 }
       );
     }
-
-    const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
-
-    // カテゴリマスターからDriveフォルダIDを取得
-    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
-    const categoryRow = categoryData.find((row: any[]) => row[0] === categoryId);
-
-    if (!categoryRow) {
-      return NextResponse.json(
-        { success: false, error: `Category ${categoryId} not found` },
-        { status: 404 }
-      );
-    }
-
-    const driveFolderId = categoryRow[9]; // J列: DriveフォルダID
-
-    if (!driveFolderId) {
-      return NextResponse.json(
-        { success: false, error: `DriveフォルダID not set for category ${categoryId}` },
-        { status: 400 }
-      );
-    }
-
-    // データ種別名を取得
-    const dataTypeName = getDataTypeFolderName(dataType);
-
-    // ディレクトリパス: ["録音データ", "2025_11"]
-    const pathSegments = [dataTypeName, issue];
-
-    // フォルダIDを解決（存在しなければ作成）
-    const targetFolderId = await ensureDirectoryWithOAuth(driveFolderId, pathSegments);
-
-    // ファイル一覧を取得
-    const files = await listFilesInFolderWithOAuth(targetFolderId);
-
-    // レスポンスを整形
-    const fileList = files.map((file: any) => ({
-      id: file.id,
-      name: file.name,
-      mimeType: file.mimeType,
-      size: file.size ? parseInt(file.size) : 0,
-      modifiedTime: file.modifiedTime,
-      webViewLink: file.webViewLink,
-    }));
-
-    return NextResponse.json({
-      success: true,
-      folderId: targetFolderId,
-      files: fileList,
-      count: fileList.length,
-    });
-
   } catch (error: any) {
     console.error('List files API error:', error);
     return NextResponse.json(
@@ -80,6 +35,128 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * カテゴリモード処理
+ */
+async function handleCategoryMode(searchParams: URLSearchParams) {
+  const categoryId = searchParams.get('categoryId');
+  const dataType = searchParams.get('dataType') as DataType;
+  const issue = searchParams.get('issue'); // "2025_11"
+
+  // バリデーション
+  if (!categoryId || !dataType || !issue) {
+    return NextResponse.json(
+      { success: false, error: 'categoryId, dataType, and issue are required for category mode' },
+      { status: 400 }
+    );
+  }
+
+  const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
+
+  // カテゴリマスターからDriveフォルダIDを取得
+  const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
+  const categoryRow = categoryData.find((row: any[]) => row[0] === categoryId);
+
+  if (!categoryRow) {
+    return NextResponse.json(
+      { success: false, error: `Category ${categoryId} not found` },
+      { status: 404 }
+    );
+  }
+
+  const driveFolderId = categoryRow[9]; // J列: DriveフォルダID
+
+  if (!driveFolderId) {
+    return NextResponse.json(
+      { success: false, error: `DriveフォルダID not set for category ${categoryId}` },
+      { status: 400 }
+    );
+  }
+
+  // データ種別名を取得
+  const dataTypeName = getDataTypeFolderName(dataType);
+
+  // ディレクトリパス: ["録音データ", "2025_11"]
+  const pathSegments = [dataTypeName, issue];
+
+  // フォルダIDを解決（存在しなければ作成）
+  const targetFolderId = await ensureDirectoryWithOAuth(driveFolderId, pathSegments);
+
+  // ファイル一覧を取得
+  const files = await listFilesInFolderWithOAuth(targetFolderId);
+
+  // レスポンスを整形
+  const fileList = files.map((file: any) => ({
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    size: file.size ? parseInt(file.size) : 0,
+    modifiedTime: file.modifiedTime,
+    webViewLink: file.webViewLink,
+  }));
+
+  return NextResponse.json({
+    success: true,
+    folderId: targetFolderId,
+    files: fileList,
+    count: fileList.length,
+  });
+}
+
+/**
+ * 企業モード処理
+ */
+async function handleCompanyMode(searchParams: URLSearchParams) {
+  const companyName = searchParams.get('companyName');
+  const folderType = searchParams.get('folderType') as CompanyFolderType;
+
+  // バリデーション
+  if (!companyName || !folderType) {
+    return NextResponse.json(
+      { success: false, error: 'companyName and folderType are required for company mode' },
+      { status: 400 }
+    );
+  }
+
+  // TODO: 企業素材のルートフォルダIDを環境変数から取得
+  // 暫定的にGoogle Drive APIで「企業素材」フォルダを検索
+  const rootFolderPath = ['企業素材', companyName, folderType];
+
+  // フォルダIDを解決（存在しなければ作成）
+  // ルートフォルダIDが不明な場合は、環境変数で指定する必要がある
+  const companyRootFolderId = process.env.COMPANY_DATA_ROOT_FOLDER_ID || '';
+
+  if (!companyRootFolderId) {
+    return NextResponse.json(
+      { success: false, error: 'COMPANY_DATA_ROOT_FOLDER_ID environment variable not set' },
+      { status: 500 }
+    );
+  }
+
+  const pathSegments = [companyName, folderType];
+  const targetFolderId = await ensureDirectoryWithOAuth(companyRootFolderId, pathSegments);
+
+  // ファイル一覧を取得
+  const files = await listFilesInFolderWithOAuth(targetFolderId);
+
+  // レスポンスを整形
+  const fileList = files.map((file: any) => ({
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    size: file.size ? parseInt(file.size) : 0,
+    modifiedTime: file.modifiedTime,
+    webViewLink: file.webViewLink,
+  }));
+
+  return NextResponse.json({
+    success: true,
+    folderId: targetFolderId,
+    files: fileList,
+    count: fileList.length,
+  });
 }
 
 /**

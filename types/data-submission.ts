@@ -14,9 +14,17 @@ export type UploadMode = 'category' | 'company';
 export type CompanyMode = 'existing' | 'new';
 
 /**
- * 企業フォルダ種別
+ * 企業フォルダ種別（新設計：8フォルダ）
  */
-export type CompanyFolderType = 'メイン' | 'サブ' | '情報シート';
+export type CompanyFolderType =
+  | 'ロゴ'
+  | 'ヒーロー画像'
+  | 'QRコード'
+  | '代表者写真'
+  | 'サービス画像'
+  | '社員写真'
+  | '情報シート'
+  | 'その他';
 
 /**
  * ファイルアップロードリクエスト

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Upload, ChevronDown, ChevronUp, Music, FileText, Image, Folder } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, Music, FileText, Image, Folder, Building2, QrCode, User, Briefcase, Users, Package } from 'lucide-react';
 import type { DataType, UploadMode, CompanyMode, CompanyFolderType } from '@/types/data-submission';
 
 interface RequiredData {
@@ -49,7 +49,7 @@ export function DataSubmissionSection({
   const [companyMode, setCompanyMode] = useState<CompanyMode>('existing');
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.name || '');
   const [newCompanyName, setNewCompanyName] = useState('');
-  const [companyFolder, setCompanyFolder] = useState<CompanyFolderType>('メイン');
+  const [selectedCompanyFolder, setSelectedCompanyFolder] = useState<CompanyFolderType>('ロゴ');
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
@@ -90,42 +90,78 @@ export function DataSubmissionSection({
   // 選択されたフォルダのファイル一覧を取得
   useEffect(() => {
     const fetchFolderFiles = async () => {
-      if (uploadMode !== 'category' || !selectedCategory || !selectedDataType || !selectedIssue) {
-        setFolderFiles([]);
-        setSelectedFile(null); // プレビューをクリア
-        return;
-      }
-
-      setLoadingFiles(true);
-      setSelectedFile(null); // フォルダ変更時にプレビューをクリア
-      try {
-        // 月号フォーマット変換: "2025年11月号" → "2025_11"
-        const issueFormatted = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
-          const paddedMonth = month.padStart(2, '0');
-          return `${year}_${paddedMonth}`;
-        });
-
-        const response = await fetch(
-          `/api/yumemaga-v2/data-submission/list-files?categoryId=${selectedCategory}&dataType=${selectedDataType}&issue=${issueFormatted}`
-        );
-        const data = await response.json();
-
-        if (data.success) {
-          setFolderFiles(data.files || []);
-        } else {
-          console.error('Failed to fetch folder files:', data.error);
+      // カテゴリモードの場合
+      if (uploadMode === 'category') {
+        if (!selectedCategory || !selectedDataType || !selectedIssue) {
           setFolderFiles([]);
+          setSelectedFile(null);
+          return;
         }
-      } catch (error) {
-        console.error('Error fetching folder files:', error);
+
+        setLoadingFiles(true);
+        setSelectedFile(null);
+        try {
+          // 月号フォーマット変換: "2025年11月号" → "2025_11"
+          const issueFormatted = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+            const paddedMonth = month.padStart(2, '0');
+            return `${year}_${paddedMonth}`;
+          });
+
+          const response = await fetch(
+            `/api/yumemaga-v2/data-submission/list-files?categoryId=${selectedCategory}&dataType=${selectedDataType}&issue=${issueFormatted}`
+          );
+          const data = await response.json();
+
+          if (data.success) {
+            setFolderFiles(data.files || []);
+          } else {
+            console.error('Failed to fetch folder files:', data.error);
+            setFolderFiles([]);
+          }
+        } catch (error) {
+          console.error('Error fetching folder files:', error);
+          setFolderFiles([]);
+        } finally {
+          setLoadingFiles(false);
+        }
+      }
+      // 企業モードの場合
+      else if (uploadMode === 'company') {
+        const companyName = companyMode === 'existing' ? selectedCompany : newCompanyName;
+        if (!companyName || !selectedCompanyFolder) {
+          setFolderFiles([]);
+          setSelectedFile(null);
+          return;
+        }
+
+        setLoadingFiles(true);
+        setSelectedFile(null);
+        try {
+          const response = await fetch(
+            `/api/yumemaga-v2/data-submission/list-files?companyName=${encodeURIComponent(companyName)}&folderType=${encodeURIComponent(selectedCompanyFolder)}`
+          );
+          const data = await response.json();
+
+          if (data.success) {
+            setFolderFiles(data.files || []);
+          } else {
+            console.error('Failed to fetch folder files:', data.error);
+            setFolderFiles([]);
+          }
+        } catch (error) {
+          console.error('Error fetching folder files:', error);
+          setFolderFiles([]);
+        } finally {
+          setLoadingFiles(false);
+        }
+      } else {
         setFolderFiles([]);
-      } finally {
-        setLoadingFiles(false);
+        setSelectedFile(null);
       }
     };
 
     fetchFolderFiles();
-  }, [uploadMode, selectedCategory, selectedDataType, selectedIssue]);
+  }, [uploadMode, selectedCategory, selectedDataType, selectedIssue, companyMode, selectedCompany, newCompanyName, selectedCompanyFolder]);
 
   // 全体進捗を計算（submissionDataを使用）
   const overallProgress = useMemo(() => {
@@ -183,7 +219,7 @@ export function DataSubmissionSection({
         // 企業モード
         formData.append('companyMode', companyMode);
         formData.append('companyName', companyMode === 'existing' ? selectedCompany : newCompanyName);
-        formData.append('companyFolder', companyFolder);
+        formData.append('companyFolder', selectedCompanyFolder);
       }
 
       // API呼び出し
@@ -341,6 +377,57 @@ export function DataSubmissionSection({
                   </option>
                 ))}
               </select>
+            </>
+          )}
+
+          {/* 企業モード時の選択UI */}
+          {uploadMode === 'company' && (
+            <>
+              {/* 既存/新規ラジオボタン */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="existing"
+                  checked={companyMode === 'existing'}
+                  onChange={(e) => setCompanyMode(e.target.value as CompanyMode)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-gray-700">既存</span>
+              </label>
+
+              {/* 企業選択ドロップダウン or 企業名入力欄 */}
+              {companyMode === 'existing' ? (
+                <select
+                  value={selectedCompany}
+                  onChange={(e) => setSelectedCompany(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  {companies.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={newCompanyName}
+                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  placeholder="企業名を入力"
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64"
+                />
+              )}
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="new"
+                  checked={companyMode === 'new'}
+                  onChange={(e) => setCompanyMode(e.target.value as CompanyMode)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-gray-700">新規</span>
+              </label>
             </>
           )}
         </div>
@@ -511,102 +598,265 @@ export function DataSubmissionSection({
           </div>
         )}
 
-        {/* 企業モード */}
+        {/* 企業モード - フォルダアイコングリッド */}
         {uploadMode === 'company' && (
-          <>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                企業選択
-              </label>
-              <div className="flex gap-4 mb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="companyMode"
-                    value="existing"
-                    checked={companyMode === 'existing'}
-                    onChange={(e) => setCompanyMode(e.target.value as CompanyMode)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-gray-700">既存企業から選択</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="companyMode"
-                    value="new"
-                    checked={companyMode === 'new'}
-                    onChange={(e) => setCompanyMode(e.target.value as CompanyMode)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-gray-700">新規企業を追加</span>
-                </label>
-              </div>
+          <div className="mb-4">
+            {/* 9カラムグリッド: 8フォルダ + ファイル一覧 */}
+            <div className="grid grid-cols-9 gap-4">
+              {/* 1. ロゴ */}
+              <button
+                onClick={() => setSelectedCompanyFolder('ロゴ')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === 'ロゴ'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === 'ロゴ' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Building2 className={`w-6 h-6 mb-2 ${selectedCompanyFolder === 'ロゴ' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === 'ロゴ' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  ロゴ
+                </span>
+                {selectedCompanyFolder === 'ロゴ' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
 
-              {companyMode === 'existing' ? (
-                <select
-                  value={selectedCompany}
-                  onChange={(e) => setSelectedCompany(e.target.value)}
-                  className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {companies.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="新規企業名を入力"
-                  className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
+              {/* 2. ヒーロー画像 */}
+              <button
+                onClick={() => setSelectedCompanyFolder('ヒーロー画像')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === 'ヒーロー画像'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === 'ヒーロー画像' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Image className={`w-6 h-6 mb-2 ${selectedCompanyFolder === 'ヒーロー画像' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === 'ヒーロー画像' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  ヒーロー画像
+                </span>
+                {selectedCompanyFolder === 'ヒーロー画像' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 3. QRコード */}
+              <button
+                onClick={() => setSelectedCompanyFolder('QRコード')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === 'QRコード'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === 'QRコード' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <QrCode className={`w-6 h-6 mb-2 ${selectedCompanyFolder === 'QRコード' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === 'QRコード' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  QRコード
+                </span>
+                {selectedCompanyFolder === 'QRコード' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 4. 代表者写真 */}
+              <button
+                onClick={() => setSelectedCompanyFolder('代表者写真')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === '代表者写真'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === '代表者写真' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <User className={`w-6 h-6 mb-2 ${selectedCompanyFolder === '代表者写真' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === '代表者写真' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  代表者写真
+                </span>
+                {selectedCompanyFolder === '代表者写真' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 5. サービス画像 */}
+              <button
+                onClick={() => setSelectedCompanyFolder('サービス画像')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === 'サービス画像'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === 'サービス画像' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Briefcase className={`w-6 h-6 mb-2 ${selectedCompanyFolder === 'サービス画像' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === 'サービス画像' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  サービス画像
+                </span>
+                {selectedCompanyFolder === 'サービス画像' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 6. 社員写真 */}
+              <button
+                onClick={() => setSelectedCompanyFolder('社員写真')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === '社員写真'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === '社員写真' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Users className={`w-6 h-6 mb-2 ${selectedCompanyFolder === '社員写真' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === '社員写真' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  社員写真
+                </span>
+                {selectedCompanyFolder === '社員写真' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 7. 情報シート */}
+              <button
+                onClick={() => setSelectedCompanyFolder('情報シート')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === '情報シート'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === '情報シート' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <FileText className={`w-6 h-6 mb-2 ${selectedCompanyFolder === '情報シート' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === '情報シート' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  情報シート
+                </span>
+                {selectedCompanyFolder === '情報シート' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 8. その他 */}
+              <button
+                onClick={() => setSelectedCompanyFolder('その他')}
+                className={`relative flex flex-col items-center p-6 rounded-lg border-2 transition-all hover:shadow-md ${
+                  selectedCompanyFolder === 'その他'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <Folder className={`w-16 h-16 mb-2 ${selectedCompanyFolder === 'その他' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Package className={`w-6 h-6 mb-2 ${selectedCompanyFolder === 'その他' ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`text-sm text-center font-medium ${selectedCompanyFolder === 'その他' ? 'text-blue-900' : 'text-gray-700'}`}>
+                  その他
+                </span>
+                {selectedCompanyFolder === 'その他' && (
+                  <div className="absolute top-3 right-3 w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
+
+              {/* 9. ファイル一覧＋プレビュー */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex gap-3">
+                {/* 左側: ファイル一覧 */}
+                <div className="flex-1">
+                  {loadingFiles ? (
+                    <div className="text-sm text-gray-500">読込中...</div>
+                  ) : folderFiles.length > 0 ? (
+                    <div>
+                      {folderFiles.length <= 6 ? (
+                        <div className="space-y-1.5">
+                          {folderFiles.map((file) => (
+                            <button
+                              key={file.id}
+                              onClick={() => setSelectedFile(file)}
+                              className={`block w-full text-left text-sm truncate px-2 py-1 rounded transition-colors ${
+                                selectedFile?.id === file.id
+                                  ? 'bg-blue-100 text-blue-900 font-medium'
+                                  : 'text-gray-700 hover:bg-gray-100 hover:text-blue-600'
+                              }`}
+                              title={`${file.name}\n更新: ${new Date(file.modifiedTime).toLocaleString('ja-JP')}`}
+                            >
+                              {file.name}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div>
+                          <button
+                            onClick={() => setFilesExpanded(!filesExpanded)}
+                            className="w-full text-left text-sm text-blue-600 hover:text-blue-800 mb-2 flex items-center gap-1"
+                          >
+                            <ChevronDown className={`w-4 h-4 transition-transform ${filesExpanded ? 'rotate-180' : ''}`} />
+                            {folderFiles.length}ファイル
+                          </button>
+
+                          {filesExpanded && (
+                            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                              {folderFiles.map((file) => (
+                                <button
+                                  key={file.id}
+                                  onClick={() => setSelectedFile(file)}
+                                  className={`block w-full text-left text-sm truncate px-2 py-1 rounded transition-colors ${
+                                    selectedFile?.id === file.id
+                                      ? 'bg-blue-100 text-blue-900 font-medium'
+                                      : 'text-gray-700 hover:bg-gray-100 hover:text-blue-600'
+                                  }`}
+                                  title={`${file.name}\n更新: ${new Date(file.modifiedTime).toLocaleString('ja-JP')}`}
+                                >
+                                  {file.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">ファイルなし</p>
+                  )}
+                </div>
+
+                {/* 右側: プレビューエリア */}
+                {selectedFile && (
+                  <div className="w-40 border-l border-gray-300 pl-3 flex flex-col">
+                    <a
+                      href={selectedFile.webViewLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex flex-col items-center justify-center gap-2 p-2 rounded hover:bg-gray-100 transition-colors group"
+                      title="Google Driveで開く"
+                    >
+                      {selectedFile.mimeType?.startsWith('image/') ? (
+                        <Image className="w-12 h-12 text-blue-500 group-hover:text-blue-600" />
+                      ) : selectedFile.mimeType?.startsWith('audio/') ? (
+                        <Music className="w-12 h-12 text-green-500 group-hover:text-green-600" />
+                      ) : selectedFile.mimeType === 'application/pdf' ? (
+                        <FileText className="w-12 h-12 text-red-500 group-hover:text-red-600" />
+                      ) : (
+                        <FileText className="w-12 h-12 text-gray-500 group-hover:text-gray-600" />
+                      )}
+
+                      <div className="text-xs text-center text-gray-600 group-hover:text-blue-600 break-all">
+                        {selectedFile.name}
+                      </div>
+
+                      <div className="text-xs text-gray-400 group-hover:text-blue-500">
+                        クリックで開く
+                      </div>
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                保存先フォルダ
-              </label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="companyFolder"
-                    value="メイン"
-                    checked={companyFolder === 'メイン'}
-                    onChange={(e) => setCompanyFolder(e.target.value as CompanyFolderType)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-gray-700">メイン（ロゴ・ヒーロー・QR等）</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="companyFolder"
-                    value="サブ"
-                    checked={companyFolder === 'サブ'}
-                    onChange={(e) => setCompanyFolder(e.target.value as CompanyFolderType)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-gray-700">サブ（その他素材）</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="companyFolder"
-                    value="情報シート"
-                    checked={companyFolder === '情報シート'}
-                    onChange={(e) => setCompanyFolder(e.target.value as CompanyFolderType)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-gray-700">情報シート</span>
-                </label>
-              </div>
+            {/* 選択中の情報を表示 */}
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900">
+                <span className="font-semibold">選択中:</span>{' '}
+                {companyMode === 'existing' ? selectedCompany : newCompanyName || '（企業名未入力）'} / {selectedCompanyFolder}
+              </p>
             </div>
-          </>
+          </div>
         )}
 
         {/* ドラッグ&ドロップエリア */}
@@ -649,7 +899,7 @@ export function DataSubmissionSection({
               <p className="text-sm text-gray-500">
                 {uploadMode === 'category'
                   ? `${selectedIssue} / ${categories.find(c => c.id === selectedCategory)?.name} / ${getDataTypeFolderName(selectedDataType)}`
-                  : `企業: ${companyMode === 'existing' ? selectedCompany : newCompanyName || '（未入力）'} / ${companyFolder}`
+                  : `企業: ${companyMode === 'existing' ? selectedCompany : newCompanyName || '（未入力）'} / ${selectedCompanyFolder}`
                 }
               </p>
             </>
