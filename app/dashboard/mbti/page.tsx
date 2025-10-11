@@ -66,13 +66,13 @@ export default function MBTIPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-700 mt-2">
-                  グループ活動を好み、人との交流を大切にします
+                  グループで行う活動が好きで、人との交流を大切にします。自分の熱意や興奮感を表に出す傾向があります。
                 </p>
               </div>
 
-              {/* 情報処理 */}
+              {/* 意識 */}
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border-2 border-purple-200">
-                <p className="text-sm font-semibold text-gray-600 mb-2">情報処理</p>
+                <p className="text-sm font-semibold text-gray-600 mb-2">意識</p>
                 <div className="mb-3">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs text-gray-600">直感型</span>
@@ -83,13 +83,13 @@ export default function MBTIPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-700 mt-2">
-                  パターンや可能性を重視し、未来志向
+                  偏見のない心を持ち、想像力が豊か。独創性を大切にし、「起こる可能性が低いこと」や「隠された意味」に着目します。
                 </p>
               </div>
 
-              {/* 意思決定 */}
+              {/* 性質 */}
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border-2 border-green-200">
-                <p className="text-sm font-semibold text-gray-600 mb-2">意思決定</p>
+                <p className="text-sm font-semibold text-gray-600 mb-2">性質</p>
                 <div className="mb-3">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs text-gray-600">思考型</span>
@@ -100,13 +100,13 @@ export default function MBTIPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-700 mt-2">
-                  論理と客観性を重視して判断
+                  客観性と合理性に着目し、論理を大切にします。社会の調和より、物事が効果的かどうかを重視する傾向があります。
                 </p>
               </div>
 
-              {/* 生活様式 */}
+              {/* 戦術 */}
               <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border-2 border-orange-200">
-                <p className="text-sm font-semibold text-gray-600 mb-2">生活様式</p>
+                <p className="text-sm font-semibold text-gray-600 mb-2">戦術</p>
                 <div className="mb-3">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs text-gray-600">計画型</span>
@@ -117,13 +117,13 @@ export default function MBTIPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-700 mt-2">
-                  構造化と計画を好む傾向
+                  決断力があり几帳面。予見可能性や明瞭さを大事にし、構造化された環境に身を置いたり計画を立てたりすることを好みます。
                 </p>
               </div>
 
-              {/* 自己認識 */}
+              {/* アイデンティティ */}
               <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 border-2 border-red-200">
-                <p className="text-sm font-semibold text-gray-600 mb-2">自己認識</p>
+                <p className="text-sm font-semibold text-gray-600 mb-2">アイデンティティ</p>
                 <div className="mb-3">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs text-gray-600">自己主張型</span>
@@ -134,7 +134,7 @@ export default function MBTIPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-700 mt-2">
-                  自信を持って行動し、ストレスに強い
+                  自信を持って行動し、ストレスに強い傾向があります。
                 </p>
               </div>
             </div>
