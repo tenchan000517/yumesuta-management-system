@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Activity,
   Eye,
-  Search
+  Search,
+  FileText,
+  Brain
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
@@ -159,8 +161,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* サイドメニュー */}
-      <aside className="w-64 bg-white shadow-lg">
-        <div className="p-6">
+      <aside className="w-64 bg-white shadow-lg flex flex-col h-screen sticky top-0">
+        <div className="p-6 flex flex-col h-full">
           <h2 className="text-xl font-bold text-gray-900 mb-6">メニュー</h2>
           <nav className="space-y-2">
             <Link href="/dashboard/sales" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
@@ -187,7 +189,19 @@ export default function Home() {
               <Users className="w-5 h-5" />
               <span>パートナー・スター</span>
             </Link>
+            <Link href="/dashboard/workflow/contract" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
+              <FileText className="w-5 h-5" />
+              <span>契約業務フロー</span>
+            </Link>
           </nav>
+
+          {/* 下部メニュー */}
+          <div className="mt-auto pt-6 border-t border-gray-200">
+            <Link href="/dashboard/mbti" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 hover:text-purple-600 rounded-lg transition-colors">
+              <Brain className="w-5 h-5" />
+              <span>MBTI診断結果</span>
+            </Link>
+          </div>
         </div>
       </aside>
 
@@ -962,10 +976,10 @@ export default function Home() {
                           </p>
                           <span className="text-sm text-gray-600">セッション</span>
                         </div>
-                        {summary.analytics.searchEngines && summary.analytics.searchEngines.breakdown && summary.analytics.searchEngines.breakdown.length > 0 ? (
+                        {summary.analytics && summary.analytics.searchEngines && summary.analytics.searchEngines.breakdown && summary.analytics.searchEngines.breakdown.length > 0 ? (
                           <div className="space-y-2">
                             {summary.analytics.searchEngines.breakdown.map((engine: any, index: number) => {
-                              const total = summary.analytics.searchEngines?.total || 1;
+                              const total = summary.analytics?.searchEngines?.total || 1;
                               const percent = ((engine.sessions / total) * 100).toFixed(1);
                               return (
                                 <div key={index} className="space-y-1">
