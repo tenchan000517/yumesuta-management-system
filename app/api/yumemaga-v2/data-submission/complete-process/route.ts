@@ -13,16 +13,98 @@ const DATA_TYPE_REVERSE_MAP: Record<DataType, string> = {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { issue, categoryId, dataType } = body;
+    const { issue, categoryId, dataType, companyId, companyFolderType } = body;
 
+    const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
+
+    // 企業モードの場合
+    if (companyId && companyFolderType) {
+      // 1. 企業マスターから企業ステータスを取得
+      const companyData = await getSheetData(spreadsheetId, '企業マスター!A2:AZ100');
+      const companyRow = companyData.find((row: any[]) => row[0] === companyId);
+
+      if (!companyRow) {
+        return NextResponse.json(
+          { success: false, error: '企業が見つかりません' },
+          { status: 404 }
+        );
+      }
+
+      const companyStatus = companyRow[49] || ''; // AX列: ステータス
+      const companyName = companyRow[1] || '';
+
+      // 2. ステータスからカテゴリを判定
+      const targetCategory = companyStatus === '新規' ? 'C' : 'E';
+
+      // 3. フォルダ種別から工程を判定
+      const FOLDER_PROCESS_MAP: Record<string, string> = {
+        '情報シート': `${targetCategory}-2`,  // 情報シート取得
+        'ロゴ': `${targetCategory}-4`,         // 写真取得
+        'ヒーロー画像': `${targetCategory}-4`,
+        'QRコード': `${targetCategory}-4`,
+        '代表者写真': `${targetCategory}-4`,
+        'サービス画像': `${targetCategory}-4`,
+        '社員写真': `${targetCategory}-4`,
+        'その他': `${targetCategory}-4`,
+      };
+
+      const targetProcessNo = FOLDER_PROCESS_MAP[companyFolderType];
+
+      if (!targetProcessNo) {
+        return NextResponse.json({
+          success: true,
+          completedProcesses: [],
+          message: '対象工程なし',
+        });
+      }
+
+      // 4. 進捗入力シートから該当工程を検索
+      const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A2:J1000');
+
+      const targetRow = progressData.find((row: any[]) => {
+        const processNo = row[0];
+        const processIssue = row[3];
+        const actualDate = row[6];
+
+        return processNo === targetProcessNo &&
+               (processIssue === issue || !processIssue) &&
+               !actualDate; // 未完了のもの
+      });
+
+      if (!targetRow) {
+        return NextResponse.json({
+          success: true,
+          completedProcesses: [],
+          message: '対象工程が見つからないか、既に完了しています',
+        });
+      }
+
+      // 5. 実績日を更新
+      const today = new Date().toLocaleDateString('ja-JP');
+      const rowIndex = progressData.indexOf(targetRow) + 2;
+
+      await updateSheetCell(
+        spreadsheetId,
+        '進捗入力シート',
+        `G${rowIndex}`,
+        today
+      );
+
+      return NextResponse.json({
+        success: true,
+        completedProcesses: [targetProcessNo],
+        processName: targetRow[1],
+        message: `${companyName}の工程 ${targetProcessNo} を完了しました`,
+      });
+    }
+
+    // カテゴリモードの既存処理
     if (!issue || !categoryId || !dataType) {
       return NextResponse.json(
         { success: false, error: '必須パラメータが不足しています' },
         { status: 400 }
       );
     }
-
-    const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
     // 1. データ種別を日本語名に変換
     const dataTypeName = DATA_TYPE_REVERSE_MAP[dataType as DataType];

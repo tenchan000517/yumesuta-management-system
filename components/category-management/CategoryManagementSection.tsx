@@ -358,6 +358,57 @@ export function CategoryManagementSection({
               {/* 工程詳細（展開時） */}
               {expandedCategory === category.id && (
                 <div className="px-4 pb-4">
+                  {/* カテゴリC/Eの場合、企業別リストのみ表示（工程リストは非表示） */}
+                  {(category.id === 'C' || category.id === 'E') ? (
+                    <div>
+                      <h4 className="font-semibold text-sm text-gray-700 mb-3">
+                        企業別進捗（{(category as any).companies?.length || 0}社）
+                      </h4>
+                      {(category as any).companies && (category as any).companies.length > 0 ? (
+                        <div className="space-y-2">
+                          {(category as any).companies.map((company: any) => (
+                            <div
+                              key={company.companyId}
+                              className={`border rounded-lg p-3 ${
+                                company.progress === 100
+                                  ? 'bg-green-50 border-green-200'
+                                  : 'bg-white border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-gray-900">{company.companyName}</span>
+                                  <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                                    company.status === '新規'
+                                      ? 'bg-orange-100 text-orange-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {company.status}
+                                  </span>
+                                </div>
+                                <span className="text-sm font-semibold text-gray-600">
+                                  {company.completed}/{company.total} ({company.progress}%)
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    company.progress === 100 ? 'bg-green-600' : 'bg-blue-600'
+                                  }`}
+                                  style={{ width: `${company.progress}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          今号の対象企業はありません
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                  /* カテゴリC/E以外は工程リストを表示 */
                   <div className="space-y-2">
                     {category.processes.map((process) => {
                       const isReady = readyProcesses.includes(process.id);
@@ -468,6 +519,7 @@ export function CategoryManagementSection({
                       );
                     })}
                   </div>
+                  )}
                 </div>
               )}
             </div>

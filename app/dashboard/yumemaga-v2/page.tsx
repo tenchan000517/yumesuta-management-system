@@ -19,6 +19,7 @@ import { CategoryManagementSection } from '@/components/category-management/Cate
 import { DataSubmissionSection } from '@/components/data-submission/DataSubmissionSection';
 import { OverallProgressSection } from '@/components/overall-progress/OverallProgressSection';
 import { CompanyManagementSection } from '@/components/company-management/CompanyManagementSection';
+import { CompanyPageProductionSection } from '@/components/company-page-production/CompanyPageProductionSection';
 
 export default function YumeMagaV2Page() {
   const [publishDate, setPublishDate] = useState('2025-11-08');
@@ -36,6 +37,7 @@ export default function YumeMagaV2Page() {
   const [readyProcesses, setReadyProcesses] = useState<string[]>([]); // Phase 2: 準備OK工程
   const [delayedProcessesMap, setDelayedProcessesMap] = useState<Record<string, number>>({}); // Phase 2: 遅延工程
   const [companies, setCompanies] = useState<any[]>([]); // 企業セクション
+  const [companyPageProduction, setCompanyPageProduction] = useState<any>(null); // 企業別ページ制作進捗
   const [loading, setLoading] = useState(false);
   const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null);
 
@@ -139,6 +141,35 @@ export default function YumeMagaV2Page() {
       const companiesData = await companiesRes.json();
       if (companiesData.success) {
         setCompanies(companiesData.companies || []);
+      }
+
+      // 企業別ページ制作進捗取得
+      const productionRes = await fetch(`/api/yumemaga-v2/company-page-production?issue=${encodeURIComponent(selectedIssue)}`);
+      const productionData = await productionRes.json();
+      if (productionData.success) {
+        setCompanyPageProduction(productionData);
+
+        // カテゴリC/Eに企業別進捗を統合
+        const allCompanies = [
+          ...(productionData.newCompanies || []),
+          ...(productionData.updatedCompanies || [])
+        ];
+
+        // カテゴリリストに企業データを追加
+        setCategories(prev => prev.map(cat => {
+          if (cat.id === 'C') {
+            return {
+              ...cat,
+              companies: productionData.newCompanies || []
+            };
+          } else if (cat.id === 'E') {
+            return {
+              ...cat,
+              companies: productionData.updatedCompanies || []
+            };
+          }
+          return cat;
+        }));
       }
     } catch (error) {
       console.error('データ取得エラー:', error);
@@ -730,6 +761,19 @@ export default function YumeMagaV2Page() {
           onUpdateStatus={handleUpdateCompanyStatus}
         />
 
+        {/* 企業別ページ制作進捗 */}
+        {companyPageProduction && (
+          <CompanyPageProductionSection
+            newCompanies={companyPageProduction.newCompanies || []}
+            updatedCompanies={companyPageProduction.updatedCompanies || []}
+            summary={companyPageProduction.summary}
+            loading={loading}
+            onRefresh={fetchAllData}
+            onUpdateActualDate={handleUpdateActualDate}
+            onUpdatePlannedDate={handleUpdatePlannedDate}
+          />
+        )}
+
         {/* 企業情報入力フォームリンク */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -750,7 +794,12 @@ export default function YumeMagaV2Page() {
         {/* データ提出進捗管理 */}
         <DataSubmissionSection
           categories={categories}
-          companies={companies.map(c => ({ name: c.companyName }))}
+          companies={companies.map(c => ({
+            companyId: c.companyId,
+            name: c.companyName,
+            companyName: c.companyName,
+            status: c.status
+          }))}
           availableIssues={issues}
           defaultIssue={selectedIssue}
         />

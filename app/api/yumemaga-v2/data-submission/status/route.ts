@@ -2,21 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
 import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
 
-type DataType = 'recording' | 'photo' | 'planning' | 'movie' | 'other';
+type DataType = 'recording' | 'photo' | 'planning' | 'content' | 'movie' | 'other';
 type DataStatus = 'submitted' | 'pending' | 'none';
 
 interface RequiredDataItem {
   type: DataType;
   name: string;
   status: DataStatus;
+  deadline: string;  // データの締切日
   optional: boolean;
   fileCount: number;
   folderId: string | null;
 }
 
 interface CategorySubmission {
-  categoryId: string;
-  categoryName: string;
+  id: string;        // フロントエンドが期待するフィールド名
+  name: string;      // フロントエンドが期待するフィールド名
+  deadline?: string; // カテゴリの締切日
   requiredData: RequiredDataItem[];
 }
 
@@ -33,6 +35,7 @@ const DATA_TYPE_MAP: Record<string, DataType> = {
   '録音データ': 'recording',
   '写真データ': 'photo',
   '企画内容': 'planning',
+  '内容整理': 'content',
   '動画データ': 'movie',
   'その他': 'other',
 };
@@ -84,6 +87,9 @@ export async function GET(request: NextRequest) {
     for (const row of categoryData) {
       const categoryId = row[0]; // A列
       const categoryName = row[1]; // B列
+      // 締切日はカテゴリマスターに存在しないため空にする
+      // 将来的には進捗入力シートから取得する必要がある
+      const categoryDeadline = '';
       const requiredDataStr = row[4] || ''; // E列（必要データ）
       const categoryStatus = row[8]; // I列（ステータス）
       const categoryDriveId = row[9]; // J列（Drive ID）
@@ -153,6 +159,7 @@ export async function GET(request: NextRequest) {
           type: dataType,
           name: dataTypeName,
           status,
+          deadline: categoryDeadline, // カテゴリの締切日を使用
           optional: false,
           fileCount,
           folderId,
@@ -160,8 +167,9 @@ export async function GET(request: NextRequest) {
       }
 
       categories.push({
-        categoryId,
-        categoryName,
+        id: categoryId,
+        name: categoryName,
+        deadline: categoryDeadline,
         requiredData,
       });
     }

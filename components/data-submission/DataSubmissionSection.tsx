@@ -20,7 +20,10 @@ interface Category {
 }
 
 interface Company {
+  companyId?: string;
   name: string;
+  companyName?: string; // 互換性のため
+  status?: string;
 }
 
 interface IssueOption {
@@ -70,6 +73,10 @@ export function DataSubmissionSection({
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
 
+  // 企業別フォルダ状況
+  const [companyFolderStatus, setCompanyFolderStatus] = useState<any[]>([]);
+  const [loadingCompanyStatus, setLoadingCompanyStatus] = useState(false);
+
   // 月号変更時にデータ提出状況を取得
   useEffect(() => {
     const fetchSubmissionStatus = async () => {
@@ -100,7 +107,7 @@ export function DataSubmissionSection({
     };
 
     fetchSubmissionStatus();
-  }, [selectedIssue, categories]);
+  }, [selectedIssue]); // categoriesを削除: APIが自身でカテゴリマスターを取得するため不要
 
   // 選択されたフォルダのファイル一覧を取得
   useEffect(() => {
@@ -177,6 +184,57 @@ export function DataSubmissionSection({
 
     fetchFolderFiles();
   }, [uploadMode, selectedCategory, selectedDataType, selectedIssue, companyMode, selectedCompany, newCompanyName, selectedCompanyFolder]);
+
+  // 企業別モード時: 選択企業の全フォルダ状況を取得
+  useEffect(() => {
+    const fetchCompanyFolderStatus = async () => {
+      if (uploadMode !== 'company' || companyMode !== 'existing' || !selectedCompany) {
+        setCompanyFolderStatus([]);
+        return;
+      }
+
+      setLoadingCompanyStatus(true);
+      try {
+        const FOLDER_TYPES: CompanyFolderType[] = [
+          'ロゴ', 'ヒーロー画像', 'QRコード', '代表者写真',
+          'サービス画像', '社員写真', '情報シート', 'その他'
+        ];
+
+        // 8フォルダ全てのファイル数を並列取得
+        const statusPromises = FOLDER_TYPES.map(async (folderType) => {
+          try {
+            const response = await fetch(
+              `/api/yumemaga-v2/data-submission/list-files?companyName=${encodeURIComponent(selectedCompany)}&folderType=${encodeURIComponent(folderType)}`
+            );
+            const data = await response.json();
+
+            return {
+              folderType,
+              fileCount: data.success ? (data.files || []).length : 0,
+              hasFiles: data.success && (data.files || []).length > 0,
+            };
+          } catch (error) {
+            console.error(`フォルダ ${folderType} の取得エラー:`, error);
+            return {
+              folderType,
+              fileCount: 0,
+              hasFiles: false,
+            };
+          }
+        });
+
+        const statuses = await Promise.all(statusPromises);
+        setCompanyFolderStatus(statuses);
+      } catch (error) {
+        console.error('企業フォルダ状況取得エラー:', error);
+        setCompanyFolderStatus([]);
+      } finally {
+        setLoadingCompanyStatus(false);
+      }
+    };
+
+    fetchCompanyFolderStatus();
+  }, [uploadMode, companyMode, selectedCompany]);
 
   // フォールバック用の進捗計算（overallProgressがnullの場合）
   const computedProgress = useMemo(() => {
@@ -271,6 +329,34 @@ export function DataSubmissionSection({
           } catch (error) {
             console.error('工程完了API呼び出しエラー:', error);
             // エラーでもアップロード自体は成功しているのでアラート不要
+          }
+        }
+
+        // 工程完了API呼び出し（企業モード追加）
+        if (uploadMode === 'company' && companyMode === 'existing' && selectedCompany && selectedCompanyFolder) {
+          try {
+            // 企業IDを取得
+            const company = companies.find(c => (c.companyName || c.name) === selectedCompany);
+            const companyId = company?.companyId;
+
+            if (companyId) {
+              const completeRes = await fetch('/api/yumemaga-v2/data-submission/complete-process', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  issue: selectedIssue,
+                  companyId: companyId,
+                  companyFolderType: selectedCompanyFolder,
+                }),
+              });
+              const completeData = await completeRes.json();
+
+              if (completeData.success && completeData.completedProcesses.length > 0) {
+                alert(`✅ ${completeData.message}\n工程が自動完了しました`);
+              }
+            }
+          } catch (error) {
+            console.error('工程完了API呼び出しエラー:', error);
           }
         }
 
@@ -499,6 +585,7 @@ export function DataSubmissionSection({
                 if (name.includes('録音') || name.includes('音声')) return 'recording';
                 if (name.includes('写真') || name.includes('画像')) return 'photo';
                 if (name.includes('企画') || name.includes('資料')) return 'planning';
+                if (name.includes('内容整理') || name.includes('原稿')) return 'content';
                 return null;
               }).filter((dt): dt is DataType => dt !== null);
 
@@ -513,7 +600,11 @@ export function DataSubmissionSection({
                     {dataTypesToShow.map((dataType) => {
                       const isSelected = selectedDataType === dataType;
                       const folderName = getDataTypeFolderName(dataType);
-                      const FolderIcon = dataType === 'recording' ? Music : dataType === 'photo' ? Image : FileText;
+                      const FolderIcon =
+                        dataType === 'recording' ? Music :
+                        dataType === 'photo' ? Image :
+                        dataType === 'content' ? FileText :
+                        FileText;
 
                       return (
                         <button
@@ -983,14 +1074,17 @@ export function DataSubmissionSection({
         </button>
       </div>
 
-      {/* カテゴリ別データ提出状況（折りたたみ可能） */}
+      {/* カテゴリ別・企業別データ提出状況（折りたたみ可能） */}
       {showCards && (
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {loadingSubmission ? (
+          {/* カテゴリ別モード */}
+          {uploadMode === 'category' && loadingSubmission && (
             <div className="col-span-full text-center py-8 text-gray-500">
               {selectedIssue} のデータ提出状況を読み込み中...
             </div>
-          ) : (
+          )}
+
+          {uploadMode === 'category' && !loadingSubmission && (
             submissionData.filter(c => c.requiredData.length > 0).map((category) => {
             const hasDeadlinePassed = category.requiredData.some(
               (data) => data.status === 'pending' && !data.optional
@@ -1081,6 +1175,99 @@ export function DataSubmissionSection({
             );
           })
           )}
+
+          {/* 企業別モード */}
+          {uploadMode === 'company' && loadingCompanyStatus && (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              {selectedCompany} のフォルダ状況を読み込み中...
+            </div>
+          )}
+
+          {uploadMode === 'company' && !loadingCompanyStatus && companyMode === 'existing' && selectedCompany && companyFolderStatus.length > 0 && (
+            companyFolderStatus.map((folder) => {
+              const getFolderIcon = (folderType: string) => {
+                switch (folderType) {
+                  case 'ロゴ': return <Building2 className="w-4 h-4" />;
+                  case 'ヒーロー画像': return <Image className="w-4 h-4" />;
+                  case 'QRコード': return <QrCode className="w-4 h-4" />;
+                  case '代表者写真': return <User className="w-4 h-4" />;
+                  case 'サービス画像': return <Briefcase className="w-4 h-4" />;
+                  case '社員写真': return <Users className="w-4 h-4" />;
+                  case '情報シート': return <FileText className="w-4 h-4" />;
+                  case 'その他': return <Package className="w-4 h-4" />;
+                  default: return <Folder className="w-4 h-4" />;
+                }
+              };
+
+              return (
+                <div
+                  key={folder.folderType}
+                  className={`border rounded-lg overflow-hidden ${
+                    folder.hasFiles
+                      ? 'border-green-300 bg-green-50'
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  {/* フォルダヘッダー */}
+                  <div
+                    className={`p-4 border-b ${
+                      folder.hasFiles
+                        ? 'bg-green-100 border-green-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      {getFolderIcon(folder.folderType)}
+                      <h3 className="font-bold text-gray-900">
+                        {folder.folderType}
+                      </h3>
+                    </div>
+                    <p
+                      className={`text-sm ${
+                        folder.hasFiles
+                          ? 'text-green-700 font-semibold'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      {folder.hasFiles ? `${folder.fileCount}件提出済み` : 'ファイルなし'}
+                    </p>
+                  </div>
+
+                  {/* ファイル数詳細 */}
+                  <div className="p-4">
+                    {folder.hasFiles ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded font-semibold">
+                          提出済み
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          {folder.fileCount}ファイル
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded">
+                        未提出
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {/* 企業別モード: データなしの場合 */}
+          {uploadMode === 'company' && !loadingCompanyStatus && companyMode === 'existing' && selectedCompany && companyFolderStatus.length === 0 && (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              フォルダ情報を取得できませんでした
+            </div>
+          )}
+
+          {/* 企業別モード: 新規企業の場合 */}
+          {uploadMode === 'company' && companyMode === 'new' && (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              新規企業のフォルダ状況は、企業登録後に表示されます
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1093,6 +1280,7 @@ function getDataTypeFolderName(dataType: DataType): string {
     recording: '録音データ',
     photo: '写真データ',
     planning: '企画内容',
+    content: '内容整理',
   };
   return map[dataType];
 }

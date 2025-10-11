@@ -1,7 +1,7 @@
 /**
  * データ種別
  */
-export type DataType = 'recording' | 'photo' | 'planning';
+export type DataType = 'recording' | 'photo' | 'planning' | 'content';
 
 /**
  * アップロードモード
