@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSheetData, updateSheetData } from '@/lib/google-sheets';
+import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
 
 /**
  * カテゴリ別進捗データ取得
@@ -74,15 +75,24 @@ export async function GET(request: Request) {
     }
 
     // Phase 1: カテゴリマスターから動的にカテゴリを取得
-    const categoryMasterData = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:I100');
+    const categoryMasterData = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:J100');
     const categories: Record<string, any[]> = {};
+    const categoryMetadata: Record<string, { driveFolderId: string; requiredData: string[] }> = {};
 
     // アクティブなカテゴリIDを抽出
     categoryMasterData.slice(1).forEach(row => {
       const categoryId = row[0];
+      const requiredDataStr = row[4] || ''; // E列: 必要データ
       const status = row[8];
+      const driveFolderId = row[9]; // J列: DriveフォルダID
+
       if (categoryId && status === 'active') {
         categories[categoryId] = [];
+        // カテゴリメタデータを保存
+        categoryMetadata[categoryId] = {
+          driveFolderId: driveFolderId || '',
+          requiredData: requiredDataStr.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0),
+        };
       }
     });
 
@@ -136,10 +146,85 @@ export async function GET(request: Request) {
       }
     });
 
+    // Google Driveファイルチェックによる自動実施日設定
+    const issueFormatted = issue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+      const paddedMonth = month.padStart(2, '0');
+      return `${year}_${paddedMonth}`;
+    });
+
+    console.log(`🔍 Google Driveファイルチェック開始 (${Object.keys(categories).length}カテゴリ)`);
+
+    for (const cat of Object.keys(categories)) {
+      const metadata = categoryMetadata[cat];
+      if (!metadata || !metadata.driveFolderId) {
+        console.log(`⏭️  カテゴリ${cat}: メタデータまたはDriveフォルダIDなし`);
+        continue;
+      }
+
+      const processes = categories[cat];
+
+      // データ提出・撮影工程を探す
+      const dataSubmissionProcess = processes.find((p: any) =>
+        p.processName.includes('データ提出') ||
+        p.processName.includes('撮影') ||
+        p.processName.includes('原稿提出')
+      );
+
+      // データ提出工程が見つからない、または既に実施日が入力されている場合はスキップ
+      if (!dataSubmissionProcess) {
+        console.log(`⏭️  カテゴリ${cat}: データ提出工程が見つかりません`);
+        continue;
+      }
+
+      if (dataSubmissionProcess.actualDate) {
+        console.log(`⏭️  カテゴリ${cat}: 実施日が既に入力済み (${dataSubmissionProcess.actualDate})`);
+        continue;
+      }
+
+      console.log(`🔎 カテゴリ${cat}: Google Driveチェック開始 (必要データ: ${metadata.requiredData.join(', ')})`);
+
+
+      // 必要データの全てのファイルが提出されているかチェック
+      const requiredDataStatus: Record<string, boolean> = {};
+
+      for (const dataTypeName of metadata.requiredData) {
+        try {
+          // データ種別名→フォルダ名のマッピング
+          const folderName = dataTypeName; // "録音データ", "写真データ" など
+          const pathSegments = [folderName, issueFormatted];
+
+          // フォルダIDを解決
+          const targetFolderId = await ensureDirectoryWithOAuth(metadata.driveFolderId, pathSegments);
+
+          // ファイル一覧を取得
+          const files = await listFilesInFolderWithOAuth(targetFolderId);
+
+          // ファイルが1件以上あれば提出済み
+          requiredDataStatus[dataTypeName] = files.length > 0;
+        } catch (error) {
+          console.error(`Google Driveチェックエラー (${cat}/${dataTypeName}):`, error);
+          requiredDataStatus[dataTypeName] = false;
+        }
+      }
+
+      // 全ての必要データが提出されている場合、実施日を自動設定
+      const allSubmitted = Object.values(requiredDataStatus).every(status => status);
+
+      if (allSubmitted) {
+        const today = new Date();
+        const formattedDate = `${today.getMonth() + 1}/${today.getDate()}`;
+
+        // processオブジェクトのactualDateを更新（メモリ上）
+        dataSubmissionProcess.actualDate = formattedDate;
+
+        console.log(`📝 ${cat}-${dataSubmissionProcess.processNo}: Google Driveファイル確認により実施日を自動設定 (${formattedDate})`);
+      }
+    }
+
     // カテゴリ別の進捗率を計算
     const progress: Record<string, any> = {};
 
-    Object.keys(categories).forEach(cat => {
+    for (const cat of Object.keys(categories)) {
       const processes = categories[cat];
 
       // Phase 3: 内部チェック・確認送付工程は既に除外されているので、全プロセスで計算
@@ -171,6 +256,46 @@ export async function GET(request: Request) {
       );
       const dataSubmissionDeadline = dataSubmissionProcess?.plannedDate || '-';
 
+      // カテゴリC/Eの場合、企業別詳細を追加
+      let companies: any[] | undefined;
+      if (cat === 'C' || cat === 'E') {
+        // 企業マスターから今号の対象企業を取得
+        const companyData = await getSheetData(spreadsheetId, '企業マスター!A2:AZ100');
+        const targetStatus = cat === 'C' ? '新規' : '変更';
+
+        companies = companyData
+          .filter((row: any[]) => {
+            const companyId = row[0];
+            const companyName = row[1];
+            const firstIssue = row[47] || '';
+            const lastIssue = row[48] || '';
+            const status = row[49] || '';
+
+            const isCurrentIssue = firstIssue === issue || lastIssue === issue;
+            const isTargetStatus = status === targetStatus;
+
+            return companyId && companyName && isCurrentIssue && isTargetStatus;
+          })
+          .map((row: any[]) => {
+            const companyId = row[0];
+            const companyName = row[1];
+
+            // この企業の工程進捗を計算
+            const completedCount = processes.filter((p: any) => p.actualDate).length;
+            const totalCount = processes.length;
+            const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+            return {
+              companyId,
+              companyName,
+              status: targetStatus,
+              progress,
+              completed: completedCount,
+              total: totalCount,
+            };
+          });
+      }
+
       progress[cat] = {
         category: cat,
         total,
@@ -179,8 +304,9 @@ export async function GET(request: Request) {
         confirmationStatus: categoryConfirmationStatus, // Phase 3: 確認送付ステータス
         processes,
         dataSubmissionDeadline,
+        companies, // カテゴリC/Eの場合のみ存在
       };
-    });
+    }
 
     // 工程が0件のカテゴリを除外
     const filteredProgress = Object.fromEntries(
