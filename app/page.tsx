@@ -19,7 +19,9 @@ import {
   Eye,
   Search,
   FileText,
-  Brain
+  Brain,
+  Menu,
+  X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
@@ -28,8 +30,18 @@ interface DashboardSummary {
   sales: any | null; // 営業KPI全データ
   yumemaga: {
     currentIssue: string;
-    inProgressCount: number;
-    delayedCount: number;
+    totalProcesses: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+    delayed: number;
+    progressRate: number;
+    delayedProcesses: Array<{ name: string; delayedDays: number }>;
+    categoryProgress: Array<{ id: string; name: string; progress: number }>;
+    nextMilestones: Array<{ name: string; plannedDate: string; daysUntil: number }>;
+    publishDate?: string;
+    daysUntilPublish?: number;
+    nextMonthProgress?: { completed: number; total: number; progressRate: number };
   } | null;
   tasks: {
     total: number;
@@ -55,6 +67,25 @@ interface DashboardSummary {
     totalPartners: number;
     totalStars: number;
   } | null;
+  contract: {
+    paymentOverdue: number;      // 入金遅延
+    newContractRequired: number; // 新規契約必要
+    contractExpiryNear: number;  // 契約満了近い
+    paymentPending: number;      // 入金待ち
+    inProgress: number;          // 進行中（合計）
+    inProgressByStep: Array<{    // 進行中の内訳（ステップ別）
+      stepNumber: number;
+      stepTitle: string;
+      count: number;
+    }>;
+    inProgressContracts: Array<{ // 進行中の企業一覧
+      companyName: string;
+      contractId: number;
+      nextStep: number;
+      nextStepTitle: string;
+    }>;
+    completed: number;           // 完了
+  } | null;
 }
 
 export default function Home() {
@@ -65,35 +96,45 @@ export default function Home() {
     analytics: null,
     sns: null,
     partners: null,
+    contract: null,
   });
   const [quickAccessButtons, setQuickAccessButtons] = useState<QuickAccessButton[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedContractCompany, setSelectedContractCompany] = useState<string | null>(null);
+  const [showAllContracts, setShowAllContracts] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const fetchDashboardSummary = async () => {
     setLoading(true);
     try {
       // 全APIを並列で取得
-      const [salesRes, yumemagaRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes] = await Promise.all([
+      const [salesRes, yumemagaRes, yumemagaProgressRes, yumemagaNextMonthRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes, contractRes] = await Promise.all([
         fetch('/api/sales-kpi'),
         fetch('/api/process-schedule'),
+        fetch('/api/yumemaga-v2/progress?issue=2025年11月号'),
+        fetch('/api/yumemaga-v2/next-month?currentIssue=2025年11月号'),
         fetch('/api/tasks'),
         fetch('/api/analytics'),
         fetch('/api/sns'),
         fetch('/api/partners'),
         fetch('/api/quick-access'),
         fetch('/api/keyword-rank'),
+        fetch('/api/contract/reminders'),
       ]);
 
-      const [salesData, yumemagaData, tasksData, analyticsData, snsData, partnersData, quickAccessData, keywordRankData] = await Promise.all([
+      const [salesData, yumemagaData, yumemagaProgressData, yumemagaNextMonthData, tasksData, analyticsData, snsData, partnersData, quickAccessData, keywordRankData, contractData] = await Promise.all([
         salesRes.json(),
         yumemagaRes.json(),
+        yumemagaProgressRes.json(),
+        yumemagaNextMonthRes.json(),
         tasksRes.json(),
         analyticsRes.json(),
         snsRes.json(),
         partnersRes.json(),
         quickAccessRes.json(),
         keywordRankRes.json(),
+        contractRes.json(),
       ]);
 
       // クイックアクセスボタンを設定
@@ -101,14 +142,174 @@ export default function Home() {
         setQuickAccessButtons(quickAccessData.data.buttons);
       }
 
+      // 契約サマリーを生成
+      let contractSummary: DashboardSummary['contract'] = null;
+      if (contractData.success && contractData.reminders) {
+        const reminders = contractData.reminders;
+
+        // リマインダーを種類別に集計
+        const paymentOverdue = reminders.filter((r: any) => r.type === 'payment-overdue').length;
+        const newContractRequired = reminders.filter((r: any) => r.type === 'new-contract-required').length;
+        const contractExpiryNear = reminders.filter((r: any) => r.type === 'contract-expiry-near').length;
+        const paymentPending = reminders.filter((r: any) => r.type === 'payment-pending').length;
+        const inProgressReminders = reminders.filter((r: any) => r.type === 'in-progress');
+        const completed = reminders.filter((r: any) => r.type === 'completed').length;
+
+        // 進行中の内訳（ステップ別に集計）
+        const stepCountMap: Record<number, { count: number; title: string }> = {};
+        inProgressReminders.forEach((r: any) => {
+          if (r.nextStep) {
+            if (!stepCountMap[r.nextStep]) {
+              stepCountMap[r.nextStep] = { count: 0, title: r.nextStepTitle || `ステップ${r.nextStep}` };
+            }
+            stepCountMap[r.nextStep].count++;
+          }
+        });
+
+        const inProgressByStep = Object.entries(stepCountMap)
+          .map(([stepNumber, data]) => ({
+            stepNumber: parseInt(stepNumber),
+            stepTitle: data.title,
+            count: data.count
+          }))
+          .sort((a, b) => a.stepNumber - b.stepNumber);
+
+        // 進行中の企業一覧（ステップ番号順にソート）
+        const inProgressContracts = inProgressReminders
+          .map((r: any) => ({
+            companyName: r.companyName,
+            contractId: r.contractId,
+            nextStep: r.nextStep || 1,
+            nextStepTitle: r.nextStepTitle || 'ステップ1'
+          }))
+          .sort((a: any, b: any) => a.nextStep - b.nextStep);
+
+        contractSummary = {
+          paymentOverdue,
+          newContractRequired,
+          contractExpiryNear,
+          paymentPending,
+          inProgress: inProgressReminders.length,
+          inProgressByStep,
+          inProgressContracts,
+          completed
+        };
+      }
+
+      // ゆめマガデータの詳細集計
+      let yumemagaSummary = null;
+      if (yumemagaData.success && yumemagaData.ganttData && yumemagaData.progressData) {
+        const progressData = yumemagaData.progressData;
+        const total = progressData.length;
+        const completed = progressData.filter((p: any) => p.status === 'completed').length;
+        const inProgress = progressData.filter((p: any) => p.status === 'in_progress').length;
+        const notStarted = progressData.filter((p: any) => p.status === 'not_started').length;
+        const delayed = progressData.filter((p: any) => p.status === 'delayed').length;
+
+        // 99%問題の修正：分子が分母と等しい場合は100%にする
+        let progressRate = 0;
+        if (total > 0) {
+          progressRate = completed === total ? 100 : Math.round((completed / total) * 100);
+        }
+
+        // 遅延工程リスト（最大3件）
+        const delayedProcesses = progressData
+          .filter((p: any) => p.status === 'delayed')
+          .slice(0, 3)
+          .map((p: any) => {
+            // 予定日と今日の差分を計算
+            const today = new Date();
+            const planned = new Date(p.plannedDate);
+            const delayedDays = Math.floor((today.getTime() - planned.getTime()) / (1000 * 60 * 60 * 24));
+            return {
+              name: p.processName,
+              delayedDays: delayedDays > 0 ? delayedDays : 1,
+            };
+          });
+
+        // カテゴリ別進捗（Top5）
+        const categoryMap: Record<string, string> = {
+          'A': 'メイン記事',
+          'C': '企業ページ(新規)',
+          'E': '企業ページ(更新)',
+          'H': 'STAR①',
+          'K': 'インタビュー②',
+          'Z': '全体統合'
+        };
+        const categoryProgress = yumemagaProgressData.success && yumemagaProgressData.categories
+          ? Object.keys(categoryMap)
+              .filter(id => yumemagaProgressData.categories[id])
+              .map(id => ({
+                id,
+                name: categoryMap[id],
+                progress: yumemagaProgressData.categories[id].progress || 0
+              }))
+              .slice(0, 5)
+          : [];
+
+        // 次のマイルストーン（未完了で予定日が近い順に2-3件）
+        const today = new Date();
+        const nextMilestones = progressData
+          .filter((p: any) => p.status !== 'completed' && p.plannedDate && p.plannedDate !== '-')
+          .map((p: any) => {
+            const planned = new Date(p.plannedDate);
+            const daysUntil = Math.ceil((planned.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            return {
+              name: p.processName,
+              plannedDate: p.plannedDate,
+              daysUntil
+            };
+          })
+          .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
+          .slice(0, 3);
+
+        // 発行予定日と残日数（ガントシートタイトルから抽出）
+        let publishDate: string | undefined;
+        let daysUntilPublish: number | undefined;
+        // TODO: ガントシートから発行日を取得（現状は仮実装）
+        if (yumemagaData.ganttData.issueNumber === '2025年11月号') {
+          publishDate = '2025-11-08';
+          const publishDateTime = new Date(publishDate);
+          daysUntilPublish = Math.ceil((publishDateTime.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
+
+        // 次月号準備の進捗
+        let nextMonthProgress;
+        if (yumemagaNextMonthData.success && yumemagaNextMonthData.processes) {
+          const processes = yumemagaNextMonthData.processes;
+          const nextTotal = processes.length;
+          const nextCompleted = processes.filter((p: any) => p.actualDate).length;
+          const nextProgressRate = nextTotal > 0
+            ? (nextCompleted === nextTotal ? 100 : Math.round((nextCompleted / nextTotal) * 100))
+            : 0;
+          nextMonthProgress = {
+            completed: nextCompleted,
+            total: nextTotal,
+            progressRate: nextProgressRate
+          };
+        }
+
+        yumemagaSummary = {
+          currentIssue: yumemagaData.ganttData.issueNumber || '未設定',
+          totalProcesses: total,
+          completed,
+          inProgress,
+          notStarted,
+          delayed,
+          progressRate,
+          delayedProcesses,
+          categoryProgress,
+          nextMilestones,
+          publishDate,
+          daysUntilPublish,
+          nextMonthProgress
+        };
+      }
+
       // サマリーデータを整形
       setSummary({
         sales: salesData.success ? salesData.data : null,
-        yumemaga: yumemagaData.success ? {
-          currentIssue: yumemagaData.data?.issueNumber || '未設定',
-          inProgressCount: yumemagaData.data?.progressSummary?.inProgress || 0,
-          delayedCount: yumemagaData.data?.progressSummary?.delayed || 0,
-        } : null,
+        yumemaga: yumemagaSummary,
         tasks: tasksData.success ? {
           total: tasksData.data?.allTaskMasters?.length || 0,
           inProgress: tasksData.data?.todayTasks?.length || 0,
@@ -142,6 +343,7 @@ export default function Home() {
           totalPartners: partnersData.data?.organizations?.length || 0,
           totalStars: partnersData.data?.stars?.length || 0,
         } : null,
+        contract: contractSummary,
       });
 
       setLastUpdated(new Date());
@@ -160,16 +362,41 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      {/* モバイルオーバーレイ（メニューより後ろ） */}
+      <div
+        className={`
+          fixed inset-0 bg-black z-30 md:opacity-0 md:pointer-events-none
+          transition-opacity duration-300
+          ${mobileMenuOpen ? 'opacity-40' : 'opacity-0 pointer-events-none'}
+        `}
+        onClick={() => setMobileMenuOpen(false)}
+      />
+
       {/* サイドメニュー */}
-      <aside className="w-64 bg-white shadow-lg flex flex-col h-screen sticky top-0">
+      <aside className={`
+        fixed md:sticky top-0 z-50 h-screen bg-white bg-opacity-100 shadow-lg flex-col
+        transition-transform duration-300 ease-in-out
+        w-full md:w-64
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        flex
+      `}>
         <div className="p-6 flex flex-col h-full">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">メニュー</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">メニュー</h2>
+            {/* モバイル閉じるボタン */}
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden text-gray-600 hover:text-gray-900"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
           <nav className="space-y-2">
             <Link href="/dashboard/sales" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <BarChart3 className="w-5 h-5" />
               <span>営業進捗</span>
             </Link>
-            <Link href="/dashboard/yumemaga" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
+            <Link href="/dashboard/yumemaga-v2" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <BookOpen className="w-5 h-5" />
               <span>ゆめマガ制作</span>
             </Link>
@@ -206,17 +433,26 @@ export default function Home() {
       </aside>
 
       {/* メインエリア */}
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 md:p-8">
         {/* ヘッダー */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                統合ダッシュボード
-              </h1>
-              <p className="text-gray-600 mt-1">
-                全業務の状況を一目で確認
-              </p>
+            <div className="flex items-center gap-4">
+              {/* モバイルハンバーガーボタン */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden text-gray-600 hover:text-gray-900"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                  統合ダッシュボード
+                </h1>
+                <p className="text-sm md:text-base text-gray-600 mt-1">
+                  全業務の状況を一目で確認
+                </p>
+              </div>
             </div>
             <button
               onClick={fetchDashboardSummary}
@@ -448,27 +684,148 @@ export default function Home() {
                   <BookOpen className="w-5 h-5 text-blue-600" />
                   ゆめマガ制作
                 </h3>
-                <Link href="/dashboard/yumemaga" className="text-sm text-blue-600 hover:underline">
+                <Link href="/dashboard/yumemaga-v2" className="text-sm text-blue-600 hover:underline">
                   詳細 →
                 </Link>
               </div>
               {summary.yumemaga ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">制作中</span>
-                    <span className="font-semibold">{summary.yumemaga.currentIssue}</span>
+                <div className="space-y-4">
+                  {/* 制作中の月号と発行予定日 */}
+                  <div className="flex justify-between items-center pb-3 border-b">
+                    <div>
+                      <span className="text-gray-600 font-medium">制作中</span>
+                      <p className="font-bold text-blue-600 mt-1">{summary.yumemaga.currentIssue}</p>
+                    </div>
+                    {summary.yumemaga.publishDate && summary.yumemaga.daysUntilPublish !== undefined && (
+                      <div className="text-right">
+                        <span className="text-xs text-gray-500">発行予定日</span>
+                        <p className="text-sm font-semibold text-gray-700">
+                          {summary.yumemaga.publishDate}
+                          <span className="ml-2 text-orange-600">
+                            (あと{summary.yumemaga.daysUntilPublish}日)
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">進行中工程</span>
-                    <span className="font-semibold">{summary.yumemaga.inProgressCount}件</span>
+
+                  {/* 全体進捗率（プログレスバー） */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-gray-700">全体進捗</span>
+                      <span className="text-lg font-bold text-blue-600">{summary.yumemaga.progressRate}%</span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+                        style={{ width: `${summary.yumemaga.progressRate}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summary.yumemaga.completed}/{summary.yumemaga.totalProcesses}工程完了
+                    </p>
                   </div>
-                  {summary.yumemaga.delayedCount > 0 && (
-                    <div className="flex justify-between items-center text-red-600">
-                      <span className="flex items-center gap-1">
-                        <AlertTriangle className="w-4 h-4" />
-                        遅延工程
-                      </span>
-                      <span className="font-semibold">{summary.yumemaga.delayedCount}件</span>
+
+                  {/* ステータス別件数（4つのグリッド） */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
+                      <p className="text-xs text-green-700 font-medium mb-1">完了</p>
+                      <p className="text-xl font-bold text-green-900">{summary.yumemaga.completed}</p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+                      <p className="text-xs text-blue-700 font-medium mb-1">進行中</p>
+                      <p className="text-xl font-bold text-blue-900">{summary.yumemaga.inProgress}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-center">
+                      <p className="text-xs text-gray-700 font-medium mb-1">未着手</p>
+                      <p className="text-xl font-bold text-gray-900">{summary.yumemaga.notStarted}</p>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
+                      <p className="text-xs text-red-700 font-medium mb-1">遅延</p>
+                      <p className="text-xl font-bold text-red-900">{summary.yumemaga.delayed}</p>
+                    </div>
+                  </div>
+
+                  {/* カテゴリ別進捗 */}
+                  {summary.yumemaga.categoryProgress && summary.yumemaga.categoryProgress.length > 0 && (
+                    <div className="pt-3 border-t">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">カテゴリ別進捗</h4>
+                      <div className="space-y-2">
+                        {summary.yumemaga.categoryProgress.map((cat, idx) => (
+                          <div key={idx}>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs text-gray-600">{cat.id}: {cat.name}</span>
+                              <span className="text-xs font-bold text-blue-600">{cat.progress}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-500 transition-all duration-300"
+                                style={{ width: `${cat.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 次のマイルストーン */}
+                  {summary.yumemaga.nextMilestones && summary.yumemaga.nextMilestones.length > 0 && (
+                    <div className="pt-3 border-t">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">🎯 次のマイルストーン</h4>
+                      <div className="space-y-1">
+                        {summary.yumemaga.nextMilestones.map((milestone, idx) => (
+                          <div key={idx} className="text-xs bg-blue-50 px-3 py-2 rounded text-blue-800">
+                            • {milestone.name}
+                            <span className="ml-2 font-semibold">
+                              (予定: {milestone.plannedDate})
+                              {milestone.daysUntil >= 0 && <span className="ml-1">あと{milestone.daysUntil}日</span>}
+                              {milestone.daysUntil < 0 && <span className="ml-1 text-red-600">{Math.abs(milestone.daysUntil)}日遅れ</span>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 遅延工程リスト */}
+                  {summary.yumemaga.delayed > 0 && summary.yumemaga.delayedProcesses.length > 0 && (
+                    <div className="pt-3 border-t">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                        <h4 className="text-sm font-semibold text-red-900">遅延工程</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {summary.yumemaga.delayedProcesses.map((task, idx) => (
+                          <div key={idx} className="text-xs bg-red-50 px-3 py-2 rounded text-red-800">
+                            • {task.name} <span className="font-semibold">({task.delayedDays}日遅れ)</span>
+                          </div>
+                        ))}
+                      </div>
+                      {summary.yumemaga.delayed > 3 && (
+                        <p className="text-xs text-red-600 mt-2">
+                          他{summary.yumemaga.delayed - 3}件の遅延工程があります
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 次月号準備 */}
+                  {summary.yumemaga.nextMonthProgress && (
+                    <div className="pt-3 border-t">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs text-gray-600 font-medium">📋 次月号準備</span>
+                        <span className="text-xs font-bold text-purple-600">
+                          {summary.yumemaga.nextMonthProgress.completed}/{summary.yumemaga.nextMonthProgress.total}工程
+                          ({summary.yumemaga.nextMonthProgress.progressRate}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 transition-all duration-300"
+                          style={{ width: `${summary.yumemaga.nextMonthProgress.progressRate}%` }}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1014,6 +1371,139 @@ export default function Home() {
 
           {/* 右カラム */}
           <div className="space-y-6">
+            {/* 契約業務フロー */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  契約業務フロー
+                </h3>
+                <Link href="/dashboard/workflow/contract" className="text-sm text-blue-600 hover:underline">
+                  詳細 →
+                </Link>
+              </div>
+              {summary.contract ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {/* グリッド1: 緊急対応が必要 */}
+                  <div className="bg-red-50 rounded-lg p-4 min-h-[120px]">
+                    <h4 className="text-sm font-bold text-red-900 mb-3 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      緊急対応
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center text-red-700">
+                        <span>入金遅延</span>
+                        <span className="font-bold">{summary.contract.paymentOverdue}件</span>
+                      </div>
+                      <div className="flex justify-between items-center text-red-700">
+                        <span>新規契約必要</span>
+                        <span className="font-bold">{summary.contract.newContractRequired}件</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* グリッド2: 注意が必要 */}
+                  <div className="bg-yellow-50 rounded-lg p-4 min-h-[120px]">
+                    <h4 className="text-sm font-bold text-yellow-900 mb-3 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      注意が必要
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center text-yellow-700">
+                        <span>契約満了近い</span>
+                        <span className="font-bold">{summary.contract.contractExpiryNear}件</span>
+                      </div>
+                      <div className="flex justify-between items-center text-yellow-700">
+                        <span>入金待ち</span>
+                        <span className="font-bold">{summary.contract.paymentPending}件</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* グリッド3: 進行中の企業一覧 */}
+                  <div className="bg-blue-50 rounded-lg p-4 min-h-[120px]">
+                    <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4" />
+                      進行中 ({summary.contract.inProgress}件)
+                    </h4>
+                    {summary.contract.inProgressContracts && summary.contract.inProgressContracts.length > 0 ? (
+                      <div className="space-y-1">
+                        {summary.contract.inProgressContracts
+                          .slice(0, showAllContracts ? undefined : 5)
+                          .map((contract) => (
+                            <button
+                              key={contract.contractId}
+                              onClick={() => setSelectedContractCompany(contract.companyName)}
+                              className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
+                                selectedContractCompany === contract.companyName
+                                  ? 'bg-blue-200 text-blue-900 font-semibold'
+                                  : 'hover:bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              <span className="font-medium">{contract.companyName}</span>
+                              <span className="text-blue-600 ml-2">(ステップ{contract.nextStep})</span>
+                            </button>
+                          ))}
+                        {summary.contract.inProgressContracts.length > 5 && (
+                          <button
+                            onClick={() => setShowAllContracts(!showAllContracts)}
+                            className="w-full text-xs text-blue-600 hover:text-blue-800 font-medium mt-2 text-center py-1"
+                          >
+                            {showAllContracts ? '閉じる' : `もっと見る (${summary.contract.inProgressContracts.length - 5}件)`}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">進行中の契約はありません</p>
+                    )}
+                  </div>
+
+                  {/* グリッド4: 選択した企業のステップ */}
+                  <div className="bg-white rounded-lg p-4 border-2 border-gray-200 min-h-[120px]">
+                    {selectedContractCompany && summary.contract.inProgressContracts ? (
+                      <>
+                        {(() => {
+                          const contract = summary.contract.inProgressContracts.find(
+                            c => c.companyName === selectedContractCompany
+                          );
+                          return contract ? (
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-900 mb-2">{contract.companyName}</h4>
+                              <div className="mb-3">
+                                <p className="text-xs text-gray-600 mb-1">次のステップ</p>
+                                <p className="text-lg font-bold text-blue-600">ステップ{contract.nextStep}</p>
+                                <p className="text-sm text-gray-700">{contract.nextStepTitle}</p>
+                              </div>
+                              <Link
+                                href="/dashboard/workflow/contract"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
+                              >
+                                詳細へ
+                                <ExternalLink className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          ) : null;
+                        })()}
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <p className="text-xs text-gray-400 text-center">企業を選択してください</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 完了件数（最下部・控えめ表示） */}
+                  <div className="col-span-full text-center">
+                    <p className="text-xs text-gray-500">
+                      完了: {summary.contract.completed}件
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400">データを読み込んでください</p>
+              )}
+            </div>
+
             {/* タスク管理 */}
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
