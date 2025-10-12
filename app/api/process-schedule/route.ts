@@ -96,7 +96,13 @@ export async function GET(request: Request) {
       const progressRawData = await getSheetData(SPREADSHEET_ID, `${progressSheet.title}!A1:Z100`);
 
       if (progressRawData && progressRawData.length > 1) {
-        progressData = progressRawData.slice(1).map((row) => {
+        // activeな工程のみを対象とする（archiveは除外）
+        const activeRows = progressRawData.slice(1).filter((row) => {
+          const statusRaw = row[8] || 'not_started';
+          return statusRaw === 'active';
+        });
+
+        progressData = activeRows.map((row) => {
           // 列構造：
           // 0: 工程No, 1: 工程名, 2: 必要データ, 3: 月号,
           // 4: 逆算予定日, 5: 入力予定日, 6: 実績日,
@@ -162,11 +168,6 @@ export async function GET(request: Request) {
           const planned = parseDate(plannedDate);
           const actual = actualDate ? parseDate(actualDate) : null;
 
-          // activeな工程のみを対象とする（archiveは除外）
-          if (statusRaw !== 'active') {
-            return null; // archiveの工程はスキップ
-          }
-
           // ステータスの判定
           let status: 'not_started' | 'in_progress' | 'completed' | 'delayed' = 'not_started';
 
@@ -201,7 +202,7 @@ export async function GET(request: Request) {
             assignee,
             notes,
           };
-        }).filter((p): p is ProgressData => p !== null && p.processName !== ''); // null（archive）と工程名が空の行は除外
+        }).filter(p => p.processName !== ''); // 工程名が空の行は除外
       }
     }
 
