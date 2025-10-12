@@ -48,3 +48,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# archive and backup files
+/アーカイブ/
+*.backup
+*.bak
+
+# documentation
+/docs/
+
+.vercel

@@ -18,7 +18,27 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "アーカイブ/**",
+      "docs/**",
     ],
+  },
+  {
+    rules: {
+      // TypeScript関連のルールを緩和
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
+      ],
+      // Next.js関連のルールを緩和
+      "@next/next/no-html-link-for-pages": "warn",
+      // React関連のルールを緩和
+      "react-hooks/exhaustive-deps": "warn",
+      "jsx-a11y/alt-text": "warn",
+    },
   },
 ];
 

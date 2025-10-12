@@ -9,11 +9,12 @@ import { getSheetData } from '@/lib/google-sheets';
  */
 export async function GET(
   request: Request,
-  { params }: { params: { companyName: string } }
+  { params }: { params: Promise<{ companyName: string }> }
 ) {
   try {
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
-    const companyName = decodeURIComponent(params.companyName);
+    const { companyName: rawCompanyName } = await params;
+    const companyName = decodeURIComponent(rawCompanyName);
 
     // 企業マスターの全列を取得（A～AY列、51列）
     const data = await getSheetData(spreadsheetId, '企業マスター!A:AY');

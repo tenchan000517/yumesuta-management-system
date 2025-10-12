@@ -34,6 +34,15 @@ export async function GET(request: Request) {
     const dateHeaders = headers.slice(3); // A,B,C列をスキップ
 
     // レイヤー列が "次月号" の工程を抽出
+    type ProcessData = {
+      processNo: string;
+      name: string;
+      plannedDate: string;
+      nextMonthIssue: string;
+      layer: string;
+      isNextMonth: boolean;
+    };
+
     const nextMonthProcesses = ganttData.slice(1)
       .filter(row => row[1] === '次月号') // B列: レイヤー
       .map(row => {
@@ -67,7 +76,7 @@ export async function GET(request: Request) {
           isNextMonth: true,
         };
       })
-      .filter(p => p !== null && p.processNo);
+      .filter((p): p is ProcessData => p !== null && !!p.processNo);
 
     // 次月号を推定
     let nextMonthIssue = '';

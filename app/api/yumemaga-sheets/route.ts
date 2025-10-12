@@ -26,13 +26,13 @@ export async function GET(request: Request) {
 
     // シート名が指定されていない場合は、全シート一覧を取得
     const metadata = await getSpreadsheetMetadata(spreadsheetId);
-    const sheets = metadata.sheets.map((sheet: any) => ({
+    const sheets = metadata.sheets?.map((sheet: any) => ({
       title: sheet.properties.title,
       sheetId: sheet.properties.sheetId,
       index: sheet.properties.index,
       rowCount: sheet.properties.gridProperties?.rowCount || 0,
       columnCount: sheet.properties.gridProperties?.columnCount || 0,
-    }));
+    })) || [];
 
     return NextResponse.json({
       success: true,

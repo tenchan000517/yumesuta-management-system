@@ -38,6 +38,17 @@ interface DataSubmissionSectionProps {
   defaultIssue: string; // デフォルトの月号（ページ全体の選択月号）
 }
 
+// ヘルパー関数: データ種別からフォルダ名を取得
+function getDataTypeFolderName(dataType: DataType): string {
+  const map: Record<DataType, string> = {
+    recording: '録音データ',
+    photo: '写真データ',
+    planning: '企画内容',
+    content: '内容整理',
+  };
+  return map[dataType];
+}
+
 export function DataSubmissionSection({
   categories,
   companies,
@@ -77,112 +88,126 @@ export function DataSubmissionSection({
   const [companyFolderStatus, setCompanyFolderStatus] = useState<any[]>([]);
   const [loadingCompanyStatus, setLoadingCompanyStatus] = useState(false);
 
-  // 月号変更時にデータ提出状況を取得
+  // 月号変更時にデータ提出状況を取得（デバウンス付き）
   useEffect(() => {
-    const fetchSubmissionStatus = async () => {
-      setLoadingSubmission(true);
-      try {
-        // データ提出状況API呼び出し
-        const statusResponse = await fetch(
-          `/api/yumemaga-v2/data-submission/status?issue=${encodeURIComponent(selectedIssue)}`
-        );
-        const statusResult = await statusResponse.json();
+    // ローディング中は重複リクエストを防止
+    if (loadingSubmission) return;
 
-        if (statusResult.success) {
-          setSubmissionData(statusResult.categories);
-          // 全体進捗を更新
-          setOverallProgress(statusResult.summary);
-        } else {
-          console.error('Failed to fetch submission status:', statusResult.error);
+    const timer = setTimeout(() => {
+      const fetchSubmissionStatus = async () => {
+        setLoadingSubmission(true);
+        try {
+          // データ提出状況API呼び出し
+          const statusResponse = await fetch(
+            `/api/yumemaga-v2/data-submission/status?issue=${encodeURIComponent(selectedIssue)}`
+          );
+          const statusResult = await statusResponse.json();
+
+          if (statusResult.success) {
+            setSubmissionData(statusResult.categories);
+            // 全体進捗を更新
+            setOverallProgress(statusResult.summary);
+          } else {
+            console.error('Failed to fetch submission status:', statusResult.error);
+            // エラー時は既存データを使用
+            setSubmissionData(categories);
+          }
+        } catch (error) {
+          console.error('Failed to fetch submission status:', error);
           // エラー時は既存データを使用
           setSubmissionData(categories);
+        } finally {
+          setLoadingSubmission(false);
         }
-      } catch (error) {
-        console.error('Failed to fetch submission status:', error);
-        // エラー時は既存データを使用
-        setSubmissionData(categories);
-      } finally {
-        setLoadingSubmission(false);
-      }
-    };
+      };
 
-    fetchSubmissionStatus();
+      fetchSubmissionStatus();
+    }, 500); // 500msデバウンス
+
+    return () => clearTimeout(timer);
   }, [selectedIssue]); // categoriesを削除: APIが自身でカテゴリマスターを取得するため不要
 
-  // 選択されたフォルダのファイル一覧を取得
+  // 選択されたフォルダのファイル一覧を取得（デバウンス付き）
   useEffect(() => {
-    const fetchFolderFiles = async () => {
-      // カテゴリモードの場合
-      if (uploadMode === 'category') {
-        if (!selectedCategory || !selectedDataType || !selectedIssue) {
+    // ローディング中は重複リクエストを防止
+    if (loadingFiles) return;
+
+    const timer = setTimeout(() => {
+      const fetchFolderFiles = async () => {
+        // カテゴリモードの場合
+        if (uploadMode === 'category') {
+          if (!selectedCategory || !selectedDataType || !selectedIssue) {
+            setFolderFiles([]);
+            setSelectedFile(null);
+            return;
+          }
+
+          setLoadingFiles(true);
+          setSelectedFile(null);
+          try {
+            // 月号フォーマット変換: "2025年11月号" → "2025_11"
+            const issueFormatted = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+              const paddedMonth = month.padStart(2, '0');
+              return `${year}_${paddedMonth}`;
+            });
+
+            const response = await fetch(
+              `/api/yumemaga-v2/data-submission/list-files?categoryId=${selectedCategory}&dataType=${selectedDataType}&issue=${issueFormatted}`
+            );
+            const data = await response.json();
+
+            if (data.success) {
+              setFolderFiles(data.files || []);
+            } else {
+              console.error('Failed to fetch folder files:', data.error);
+              setFolderFiles([]);
+            }
+          } catch (error) {
+            console.error('Error fetching folder files:', error);
+            setFolderFiles([]);
+          } finally {
+            setLoadingFiles(false);
+          }
+        }
+        // 企業モードの場合
+        else if (uploadMode === 'company') {
+          const companyName = companyMode === 'existing' ? selectedCompany : newCompanyName;
+          if (!companyName || !selectedCompanyFolder) {
+            setFolderFiles([]);
+            setSelectedFile(null);
+            return;
+          }
+
+          setLoadingFiles(true);
+          setSelectedFile(null);
+          try {
+            const response = await fetch(
+              `/api/yumemaga-v2/data-submission/list-files?companyName=${encodeURIComponent(companyName)}&folderType=${encodeURIComponent(selectedCompanyFolder)}`
+            );
+            const data = await response.json();
+
+            if (data.success) {
+              setFolderFiles(data.files || []);
+            } else {
+              console.error('Failed to fetch folder files:', data.error);
+              setFolderFiles([]);
+            }
+          } catch (error) {
+            console.error('Error fetching folder files:', error);
+            setFolderFiles([]);
+          } finally {
+            setLoadingFiles(false);
+          }
+        } else {
           setFolderFiles([]);
           setSelectedFile(null);
-          return;
         }
+      };
 
-        setLoadingFiles(true);
-        setSelectedFile(null);
-        try {
-          // 月号フォーマット変換: "2025年11月号" → "2025_11"
-          const issueFormatted = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
-            const paddedMonth = month.padStart(2, '0');
-            return `${year}_${paddedMonth}`;
-          });
+      fetchFolderFiles();
+    }, 800); // 800msデバウンス（ファイル取得は若干長めに）
 
-          const response = await fetch(
-            `/api/yumemaga-v2/data-submission/list-files?categoryId=${selectedCategory}&dataType=${selectedDataType}&issue=${issueFormatted}`
-          );
-          const data = await response.json();
-
-          if (data.success) {
-            setFolderFiles(data.files || []);
-          } else {
-            console.error('Failed to fetch folder files:', data.error);
-            setFolderFiles([]);
-          }
-        } catch (error) {
-          console.error('Error fetching folder files:', error);
-          setFolderFiles([]);
-        } finally {
-          setLoadingFiles(false);
-        }
-      }
-      // 企業モードの場合
-      else if (uploadMode === 'company') {
-        const companyName = companyMode === 'existing' ? selectedCompany : newCompanyName;
-        if (!companyName || !selectedCompanyFolder) {
-          setFolderFiles([]);
-          setSelectedFile(null);
-          return;
-        }
-
-        setLoadingFiles(true);
-        setSelectedFile(null);
-        try {
-          const response = await fetch(
-            `/api/yumemaga-v2/data-submission/list-files?companyName=${encodeURIComponent(companyName)}&folderType=${encodeURIComponent(selectedCompanyFolder)}`
-          );
-          const data = await response.json();
-
-          if (data.success) {
-            setFolderFiles(data.files || []);
-          } else {
-            console.error('Failed to fetch folder files:', data.error);
-            setFolderFiles([]);
-          }
-        } catch (error) {
-          console.error('Error fetching folder files:', error);
-          setFolderFiles([]);
-        } finally {
-          setLoadingFiles(false);
-        }
-      } else {
-        setFolderFiles([]);
-        setSelectedFile(null);
-      }
-    };
-
-    fetchFolderFiles();
+    return () => clearTimeout(timer);
   }, [uploadMode, selectedCategory, selectedDataType, selectedIssue, companyMode, selectedCompany, newCompanyName, selectedCompanyFolder]);
 
   // 企業別モード時: 選択企業の全フォルダ状況を取得
@@ -1272,15 +1297,4 @@ export function DataSubmissionSection({
       )}
     </div>
   );
-}
-
-// ヘルパー関数
-function getDataTypeFolderName(dataType: DataType): string {
-  const map: Record<DataType, string> = {
-    recording: '録音データ',
-    photo: '写真データ',
-    planning: '企画内容',
-    content: '内容整理',
-  };
-  return map[dataType];
 }

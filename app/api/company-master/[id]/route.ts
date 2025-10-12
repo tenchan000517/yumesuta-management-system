@@ -4,10 +4,11 @@ import type { CompanyMasterData } from '@/types/workflow';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const companyId = parseInt(params.id);
+    const { id } = await params;
+    const companyId = parseInt(id);
 
     if (isNaN(companyId)) {
       return NextResponse.json(

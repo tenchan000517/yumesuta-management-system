@@ -224,6 +224,7 @@ function getDataTypeFolderName(dataType: DataType): string {
     recording: '録音データ',
     photo: '写真データ',
     planning: '企画内容',
+    content: '原稿',
   };
   return map[dataType];
 }

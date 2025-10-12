@@ -53,10 +53,11 @@ function getColumnLetter(col: number): string {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const contractId = parseInt(params.id);
+    const { id } = await params;
+    const contractId = parseInt(id);
     if (isNaN(contractId)) {
       return NextResponse.json(
         { success: false, error: 'Invalid contract ID' },
@@ -116,10 +117,11 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const contractId = parseInt(params.id);
+    const { id } = await params;
+    const contractId = parseInt(id);
     if (isNaN(contractId)) {
       return NextResponse.json(
         { success: false, error: 'Invalid contract ID' },

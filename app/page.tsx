@@ -104,10 +104,42 @@ export default function Home() {
   const [selectedContractCompany, setSelectedContractCompany] = useState<string | null>(null);
   const [showAllContracts, setShowAllContracts] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [categoryMetadata, setCategoryMetadata] = useState<any[]>([]); // カテゴリマスター
+
+  // カテゴリマスター取得
+  useEffect(() => {
+    const fetchCategoryMetadata = async () => {
+      try {
+        const res = await fetch('/api/yumemaga-v2/categories');
+        const data = await res.json();
+        if (data.success) {
+          setCategoryMetadata(data.categories);
+        }
+      } catch (error) {
+        console.error('カテゴリマスター取得エラー:', error);
+      }
+    };
+    fetchCategoryMetadata();
+  }, []);
 
   const fetchDashboardSummary = async () => {
     setLoading(true);
     try {
+      // カテゴリマスターを先に取得（カテゴリ名表示に必要）
+      let localCategoryMetadata = categoryMetadata;
+      if (localCategoryMetadata.length === 0) {
+        try {
+          const categoryRes = await fetch('/api/yumemaga-v2/categories');
+          const categoryData = await categoryRes.json();
+          if (categoryData.success) {
+            localCategoryMetadata = categoryData.categories;
+            setCategoryMetadata(categoryData.categories);
+          }
+        } catch (error) {
+          console.error('カテゴリマスター取得エラー:', error);
+        }
+      }
+
       // 全APIを並列で取得
       const [salesRes, yumemagaRes, yumemagaProgressRes, yumemagaNextMonthRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes, contractRes] = await Promise.all([
         fetch('/api/sales-kpi'),
@@ -217,9 +249,27 @@ export default function Home() {
           .filter((p: any) => p.status === 'delayed')
           .slice(0, 3)
           .map((p: any) => {
-            // 予定日と今日の差分を計算
+            // 予定日と今日の差分を計算（日本時間で）
             const today = new Date();
-            const planned = new Date(p.plannedDate);
+            today.setHours(0, 0, 0, 0);
+
+            // 予定日のパース（年を補完）
+            let planned: Date;
+            if (p.plannedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // YYYY-MM-DD形式
+              planned = new Date(p.plannedDate + 'T00:00:00+09:00');
+            } else if (p.plannedDate.match(/^\d{1,2}\/\d{1,2}$/)) {
+              // M/D形式 - 年を補完（今年か来年）
+              const [month, day] = p.plannedDate.split('/').map((s: string) => parseInt(s));
+              const currentYear = new Date().getFullYear();
+              planned = new Date(currentYear, month - 1, day);
+              planned.setHours(0, 0, 0, 0);
+            } else {
+              // その他の形式
+              planned = new Date(p.plannedDate);
+              planned.setHours(0, 0, 0, 0);
+            }
+
             const delayedDays = Math.floor((today.getTime() - planned.getTime()) / (1000 * 60 * 60 * 24));
             return {
               name: p.processName,
@@ -227,32 +277,58 @@ export default function Home() {
             };
           });
 
-        // カテゴリ別進捗（Top5）
-        const categoryMap: Record<string, string> = {
-          'A': 'メイン記事',
-          'C': '企業ページ(新規)',
-          'E': '企業ページ(更新)',
-          'H': 'STAR①',
-          'K': 'インタビュー②',
-          'Z': '全体統合'
+        // カテゴリ別進捗（すべてのカテゴリ）
+        // カテゴリ名を取得するヘルパー関数
+        const getCategoryName = (catId: string) => {
+          const category = localCategoryMetadata.find(c => c.categoryId === catId);
+          return category?.categoryName || catId;
         };
+
+        // カテゴリの表示順を取得するヘルパー関数
+        const getCategoryDisplayOrder = (catId: string) => {
+          const category = localCategoryMetadata.find(c => c.categoryId === catId);
+          return category?.displayOrder || 999;
+        };
+
         const categoryProgress = yumemagaProgressData.success && yumemagaProgressData.categories
-          ? Object.keys(categoryMap)
-              .filter(id => yumemagaProgressData.categories[id])
-              .map(id => ({
+          ? Object.entries(yumemagaProgressData.categories)
+              .filter(([id, _]) => id !== 'Z' && id !== 'B') // Z（全体進捗）とB（全体調整）を除外
+              .map(([id, data]: [string, any]) => ({
                 id,
-                name: categoryMap[id],
-                progress: yumemagaProgressData.categories[id].progress || 0
+                name: getCategoryName(id), // カテゴリマスターから正式名称を取得
+                progress: data.progress || 0,
+                displayOrder: getCategoryDisplayOrder(id)
               }))
-              .slice(0, 5)
+              .sort((a, b) => a.displayOrder - b.displayOrder) // 表示順でソート
           : [];
 
         // 次のマイルストーン（未完了で予定日が近い順に2-3件）
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const currentMonth = today.getMonth();
         const nextMilestones = progressData
           .filter((p: any) => p.status !== 'completed' && p.plannedDate && p.plannedDate !== '-')
           .map((p: any) => {
-            const planned = new Date(p.plannedDate);
+            // 予定日のパース（年を補完、年またぎ配慮）
+            let planned: Date;
+            if (p.plannedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // YYYY-MM-DD形式
+              planned = new Date(p.plannedDate + 'T00:00:00+09:00');
+            } else if (p.plannedDate.match(/^\d{1,2}\/\d{1,2}$/)) {
+              // M/D形式 - 年を補完（未来のマイルストーンなので、過去の月は来年として扱う）
+              const [month, day] = p.plannedDate.split('/').map((s: string) => parseInt(s));
+              const currentYear = new Date().getFullYear();
+
+              // 月が現在より前の場合は来年、同じか後の場合は今年
+              const targetYear = (month - 1) < currentMonth ? currentYear + 1 : currentYear;
+              planned = new Date(targetYear, month - 1, day);
+              planned.setHours(0, 0, 0, 0);
+            } else {
+              // その他の形式
+              planned = new Date(p.plannedDate);
+              planned.setHours(0, 0, 0, 0);
+            }
+
             const daysUntil = Math.ceil((planned.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
             return {
               name: p.processName,
@@ -263,14 +339,30 @@ export default function Home() {
           .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
           .slice(0, 3);
 
-        // 発行予定日と残日数（ガントシートタイトルから抽出）
+        // 校了予定日と残日数（月号の前月18日を計算）
         let publishDate: string | undefined;
         let daysUntilPublish: number | undefined;
-        // TODO: ガントシートから発行日を取得（現状は仮実装）
-        if (yumemagaData.ganttData.issueNumber === '2025年11月号') {
-          publishDate = '2025-11-08';
-          const publishDateTime = new Date(publishDate);
-          daysUntilPublish = Math.ceil((publishDateTime.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // 月号から年月を抽出（例：2025年11月号 → 2025-10-18）
+        const issueMatch = yumemagaData.ganttData.issueNumber.match(/(\d{4})年(\d{1,2})月号/);
+        if (issueMatch) {
+          const year = parseInt(issueMatch[1]);
+          const month = parseInt(issueMatch[2]);
+
+          // 前月を計算（1月の場合は前年12月）
+          let publishYear = year;
+          let publishMonth = month - 1;
+          if (publishMonth === 0) {
+            publishYear = year - 1;
+            publishMonth = 12;
+          }
+
+          publishDate = `${publishYear}-${publishMonth.toString().padStart(2, '0')}-18`; // 校了予定日は前月18日
+          const publishDateTime = new Date(publishDate + 'T00:00:00+09:00'); // 日本時間で解釈
+          publishDateTime.setHours(0, 0, 0, 0);
+          const todayForCalc = new Date();
+          todayForCalc.setHours(0, 0, 0, 0);
+          daysUntilPublish = Math.ceil((publishDateTime.getTime() - todayForCalc.getTime()) / (1000 * 60 * 60 * 24));
         }
 
         // 次月号準備の進捗
@@ -698,7 +790,7 @@ export default function Home() {
                     </div>
                     {summary.yumemaga.publishDate && summary.yumemaga.daysUntilPublish !== undefined && (
                       <div className="text-right">
-                        <span className="text-xs text-gray-500">発行予定日</span>
+                        <span className="text-xs text-gray-500">校了予定日</span>
                         <p className="text-sm font-semibold text-gray-700">
                           {summary.yumemaga.publishDate}
                           <span className="ml-2 text-orange-600">

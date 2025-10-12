@@ -16,7 +16,7 @@ import {
   getTopQueries,
   getTopSearchPages,
 } from '@/lib/search-console';
-import { getClarityMetrics } from '@/lib/microsoft-clarity';
+// import { getClarityMetrics } from '@/lib/microsoft-clarity'; // DISABLED: Rate limiting issues
 import { AnalyticsData, SEOKPIMetrics } from '@/types/analytics';
 
 /**
@@ -187,31 +187,33 @@ export async function GET(request: Request) {
     }
 
     // Fetch Microsoft Clarity data
-    try {
-      const clarityToken = process.env.CLARITY_API_TOKEN;
+    // ⚠️ DISABLED: Clarity API has rate limiting issues
+    // try {
+    //   const clarityToken = process.env.CLARITY_API_TOKEN;
 
-      if (clarityToken) {
-        // Clarity API only supports 1-3 days
-        const clarityDays = Math.min(days, 3) as 1 | 2 | 3;
-        const numOfDays = clarityDays.toString() as '1' | '2' | '3';
+    //   if (clarityToken) {
+    //     // Clarity API only supports 1-3 days
+    //     const clarityDays = Math.min(days, 3) as 1 | 2 | 3;
+    //     const numOfDays = clarityDays.toString() as '1' | '2' | '3';
 
-        const clarityData = await getClarityMetrics(
-          clarityToken,
-          numOfDays,
-          'Country' // Example dimension
-        );
+    //     const clarityData = await getClarityMetrics(
+    //       clarityToken,
+    //       numOfDays,
+    //       'Country' // Example dimension
+    //     );
 
-        // Clarity might return null if rate limited
-        if (clarityData) {
-          analyticsData.clarity = clarityData;
-        } else {
-          console.warn('Clarity API unavailable (rate limited or error). Skipping Clarity metrics.');
-        }
-      }
-    } catch (error) {
-      console.error('Microsoft Clarity API error:', error);
-      // Continue even if Clarity fails
-    }
+    //     // Clarity might return null if rate limited
+    //     if (clarityData) {
+    //       analyticsData.clarity = clarityData;
+    //     } else {
+    //       console.warn('Clarity API unavailable (rate limited or error). Skipping Clarity metrics.');
+    //     }
+    //   }
+    // } catch (error) {
+    //   console.error('Microsoft Clarity API error:', error);
+    //   // Continue even if Clarity fails
+    // }
+    console.log('Clarity API is disabled due to rate limiting issues.');
 
     // Calculate KPI metrics
     if (analyticsData.searchConsole && analyticsData.googleAnalytics) {
