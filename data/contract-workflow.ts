@@ -225,6 +225,13 @@ export const contractWorkflowSteps: WorkflowStep[] = [
     guides: [
       {
         id: 's8-g1',
+        label: 'メール例文を開く',
+        type: 'modal',
+        target: 'invoice-send',
+        icon: '📧'
+      },
+      {
+        id: 's8-g2',
         label: 'マネーフォワードを開く',
         type: 'external',
         target: 'https://biz.moneyforward.com/',

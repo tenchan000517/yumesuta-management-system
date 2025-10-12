@@ -11,7 +11,7 @@ export async function GET() {
     // Google Sheetsから全データ取得
     const rawData = await getSheetData(
       spreadsheetId,
-      `${sheetName}!A:P`
+      `${sheetName}!A:AD`
     );
 
     // データパース
@@ -50,25 +50,26 @@ function parseContractData(rows: any[][]): ContractData[] {
     if (isNaN(id) || id === 0) continue;
 
     // 企業名が空の場合もスキップ
-    if (!row[1] || row[1].trim() === '') continue;
+    if (!row[2] || row[2].trim() === '') continue;
 
     data.push({
       id: id,
-      companyName: row[1] || '',
-      contractService: row[2] || '',
-      contractDate: row[3] || '',
-      amount: row[4] || '',
-      paymentMethod: row[5] || '',
-      contractSentDate: row[6] || undefined,
-      contractReceivedDate: row[7] || undefined,
-      applicationSentDate: row[8] || undefined,
-      applicationReceivedDate: row[9] || undefined,
-      paymentDueDate: row[10] || '',
-      paymentActualDate: row[11] || undefined,
-      paymentStatus: row[12] || '未入金',
-      delayDays: parseInt(row[13]) || undefined,
-      publicationIssue: row[14] || '',
-      notes: row[15] || undefined
+      companyId: parseInt(row[1]),
+      companyName: row[2] || '',
+      contractService: row[3] || '',
+      contractDate: row[4] || '',
+      amount: row[5] || '',
+      paymentMethod: row[6] || '',
+      contractSentDate: row[7] || undefined,
+      contractReceivedDate: row[8] || undefined,
+      applicationSentDate: row[9] || undefined,
+      applicationReceivedDate: row[10] || undefined,
+      paymentDueDate: row[11] || '',
+      paymentActualDate: row[12] || undefined,
+      paymentStatus: row[13] || '未入金',
+      delayDays: parseInt(row[14]) || undefined,
+      publicationIssue: row[15] || '',
+      notes: row[16] || undefined
     });
   }
 

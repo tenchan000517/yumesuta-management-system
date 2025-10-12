@@ -1,31 +1,48 @@
 # 統合マネジメントシステム MVP開発 - 進捗管理
 
 **作成日**: 2025-10-04
-**最終更新**: 2025-10-10
-**ステータス**: MVP完成 ✅ + Phase 2拡張機能開発中 🚧
+**最終更新**: 2025-10-12
+**ステータス**: MVP完成 ✅ + Phase 1.6契約企業マスタ統合完了 🎉
 
 ---
 
 ## 📊 現在の状況
 
 ### 現在のフェーズ
-**Phase 2拡張機能開発中 - カテゴリ別予実管理のGoogle Drive連動**
+**Phase 1.6完了 - 契約企業マスタ統合による企業情報一元管理実現**
 
-### 次にやるべきこと（Phase 2継続）
-1. 進捗入力シートへの自動書き込み実装（Phase 2）
-2. カテゴリC/Eの企業別進捗対応（Phase 3）
-3. キャッシュ機構の導入（Phase 4、オプション）
+### 次にやるべきこと
+1. ✅ Phase 1.6完了 - 全ての必須機能とUI機能実装済み
+2. Phase 1.6の実運用テスト実施
+3. Phase 2以降の拡張機能検討（スプレッドシート書き込み、自動更新等）
 
-📖 **引き継ぎ書**: `docs/yumemaga-production-management/HANDOVER_CATEGORY_PROGRESS_DRIVE_INTEGRATION.md`
+📖 **最新実装計画書**: `docs/workflow/Phase1.6_最終実装計画書_2025-10-12.md`
 
-### 直近の作業（2025-10-10）
+### 直近の作業（2025-10-12）
+- ✅ **Phase 1.6: 契約企業マスタ統合 完全実装完了** 🎉
+  - 企業名正規化関数の実装（法人格削除、括弧保持）
+  - 契約ID生成関数の実装
+  - 企業マスタ登録関数の実装（自動企業ID採番）
+  - リマインダーAPIへの自動作成ロジック統合
+  - 契約作成APIの企業IDベース検索への修正
+  - 企業リスト取得APIの実装
+  - 企業詳細取得APIの実装（`/api/company-master/[id]`）
+  - 既存企業契約作成APIの実装
+  - 既存企業契約モーダルコンポーネントの実装
+  - 契約一覧APIの列構造修正（companyId対応）
+  - SidePanelに企業情報セクション追加（ステップ①のみ表示）
+  - 企業情報詳細モーダルの実装（全25項目表示）
+  - メインページへの統合（「既存企業追加契約」ボタン、企業情報表示）
+  - 不要なauto-create APIの削除
+- ✅ **全14タスク完了** - 表記ゆれ対応、ID管理、初回契約自動作成、2件目以降手動登録、企業情報表示機能の完成
+
+### 過去の作業（2025-10-10）
 - ✅ カテゴリ別予実管理のGoogle Drive連動機能 Phase 1実装完了
   - Google Driveファイルチェックロジック追加（`app/api/yumemaga-v2/progress/route.ts` 149-222行目）
   - カテゴリマスターからメタデータ取得（DriveフォルダID、必要データ）
   - 全必要データ提出済みなら実施日を自動設定（メモリ上）
   - テスト成功: カテゴリAの進捗が0% → 9%に増加
 - ✅ 完全引き継ぎ書作成（KGI・理念・コンセプト・実装状況・残タスク含む）
-- 🚧 Phase 2以降: 進捗入力シートへの永続化、企業別対応、キャッシュ機構
 
 ### 過去の作業（2025-10-05）
 - ✅ タスク管理スプレッドシート設計書作成（`docs/requirements/investigations/task-spreadsheet-design.md`）
@@ -150,6 +167,37 @@
 
 ---
 
+### Phase 1.6: 契約企業マスタ統合（14/14 完了 ✅）
+- [x] 企業名正規化関数の作成（`lib/normalize-company-name.ts`）
+- [x] 契約ID生成関数の作成（`lib/generate-contract-id.ts`）
+- [x] 企業マスタ登録関数の作成（`lib/company-master-utils.ts`）
+- [x] リマインダーAPIに自動作成ロジックを統合（`app/api/contract/reminders/route.ts`）
+- [x] 契約作成APIを企業IDベースに修正（`app/api/contract/create/route.ts`）
+- [x] 企業リスト取得APIの作成（`app/api/company-master/list/route.ts`）
+- [x] 企業詳細取得APIの作成（`app/api/company-master/[id]/route.ts`）
+- [x] 既存企業契約作成APIの作成（`app/api/contract/create-for-existing/route.ts`）
+- [x] 既存企業契約モーダルコンポーネントの作成（`components/workflow/ExistingCompanyContractModal.tsx`）
+- [x] 契約一覧APIの列構造修正（`app/api/contract/list/route.ts`）
+- [x] SidePanelに企業情報セクション追加（`components/workflow/SidePanel.tsx`）
+- [x] 企業情報詳細モーダルの実装（`components/workflow/SidePanel.tsx`）
+- [x] メインページへの統合（`app/dashboard/workflow/contract/page.tsx`）
+- [x] 不要なauto-create APIの削除
+
+**開始日**: 2025-10-12
+**完了日**: 2025-10-12
+
+**主な機能**:
+- 企業情報の一元管理（契約企業マスタを活用したID管理）
+- 企業名の正規化による表記ゆれ対応（法人格のみ削除、括弧は保持）
+- 初回契約の自動作成（顧客マスタで「受注」になった企業）
+- 2件目以降の手動登録（「既存企業追加契約」ボタンから）
+- 企業IDベースの紐付け（表記ゆれに強い仕組み）
+- ステップ①サイドパネルでの企業情報表示（基本情報 + 詳細モーダル）
+
+**実装詳細**: `docs/workflow/Phase1.6_最終実装計画書_2025-10-12.md`、`docs/workflow/契約業務フロー統合_開発フロー.md`
+
+---
+
 ### Phase 1-7: タスク管理機能（8/8 完了 ✅）
 - [x] タスク管理スプレッドシート設計・作成
 - [x] タスクデータ取得API実装（`/api/tasks`）
@@ -189,15 +237,19 @@
 - **Phase 1-4 (パートナー・スターデータ管理)**: ✅ 100% 完了
 - **Phase 1-5 (HP・LLMO分析管理)**: ✅ 100% 完了
 - **Phase 1-6 (SNS投稿管理)**: ✅ 100% 完了
+- **Phase 1.6 (契約企業マスタ統合)**: ✅ 100% 完了
 - **Phase 1-7 (タスク管理)**: ✅ 100% 完了
 - **Phase 1-8 (統合・テスト)**: ✅ 100% 完了
 
 ### タスク完了数
-- **完了**: 68/68 タスク（100%）🎉
+- **完了**: 82/82 タスク（100%）🎉
 - **残り**: 0タスク
 
 ### MVP完成
 **2025-10-05 完成** - 全6機能が統合され、正常に動作しています！
+
+### Phase 1.6完成（拡張機能）
+**2025-10-12 完成** - 契約企業マスタ統合により企業情報の一元管理を実現！
 
 ---
 
@@ -331,6 +383,64 @@
 **開発期間**: 2025-10-04 〜 2025-10-05（2日間）
 **総タスク数**: 68タスク
 **完了率**: 100%
+
+### 2025-10-12
+- **Phase 1.6: 契約企業マスタ統合 完了** ✅
+  - 企業名正規化関数の実装（`lib/normalize-company-name.ts`）
+    - 法人格のみ削除（株式会社、（株）、有限会社など）
+    - 全角・半角スペース削除
+    - 小文字変換
+    - 括弧は保持（別拠点を区別するため）
+  - 契約ID生成関数の実装（`lib/generate-contract-id.ts`）
+    - 契約・入金管理シートのA列から最大IDを取得
+    - 最大ID + 1を返す
+  - 企業マスタ登録関数の実装（`lib/company-master-utils.ts`）
+    - 正規化名で企業検索
+    - 既存企業が見つかればIDを返す
+    - 新規企業の場合は契約企業マスタに登録し、新しいIDを返す
+  - リマインダーAPIへの自動作成ロジック統合（`app/api/contract/reminders/route.ts`）
+    - 顧客マスタで「受注」の企業を検出
+    - 企業IDを取得または新規作成
+    - 初回契約のみ自動作成（A, B, C列のみ）
+    - リマインダーカードに表示
+  - 契約作成APIの企業IDベース検索への修正（`app/api/contract/create/route.ts`）
+    - 企業名ではなく企業IDで検索
+    - 正規化名で企業マスタから企業IDを取得
+    - B列（企業ID）が一致し、D列が空欄の行を検索
+  - 企業リスト取得APIの実装（`app/api/company-master/list/route.ts`）
+    - 契約企業マスタのA列（企業ID）とB列（企業正式名称）を取得
+  - 企業詳細取得APIの実装（`app/api/company-master/[id]/route.ts`）
+    - 企業IDから全25列の詳細情報を取得
+    - CompanyMasterData型に変換して返却
+  - 既存企業契約作成APIの実装（`app/api/contract/create-for-existing/route.ts`）
+    - 企業IDから企業名を取得
+    - 契約IDを生成
+    - 契約・入金管理シートに新規行を追加（全列）
+  - 既存企業契約モーダルコンポーネントの実装（`components/workflow/ExistingCompanyContractModal.tsx`）
+    - 企業検索機能（名前で検索）
+    - 企業選択（リスト表示）
+    - 契約情報入力フォーム
+  - 契約一覧APIの列構造修正（`app/api/contract/list/route.ts`）
+    - 取得範囲をA:PからA:ADに変更
+    - companyIdフィールド追加
+    - 全列インデックスを+1にシフト
+  - SidePanelに企業情報セクション追加（`components/workflow/SidePanel.tsx`）
+    - ステップ①のみ企業情報セクションを表示
+    - 基本情報の表示（企業名、住所、電話、メール、担当者）
+    - 「詳細を表示」ボタン追加
+  - 企業情報詳細モーダルの実装（`components/workflow/SidePanel.tsx`）
+    - 全25項目を5セクションに分けて表示
+    - スクロール可能、レスポンシブ対応
+  - メインページへの統合（`app/dashboard/workflow/contract/page.tsx`）
+    - 「既存企業追加契約」ボタン追加
+    - モーダル表示・非表示制御
+    - SidePanelにcompanyIdを渡す
+    - 成功時のリマインダー再取得
+  - 不要なauto-create APIの削除
+
+**Phase 1.6 開発期間**: 2025-10-12（1日間）
+**Phase 1.6 タスク数**: 14タスク
+**Phase 1.6 完了率**: 100%
 
 ---
 

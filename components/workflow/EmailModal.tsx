@@ -9,13 +9,24 @@ interface EmailModalProps {
   email: EmailTemplate | null;
   isOpen: boolean;
   onClose: () => void;
+  companyName?: string; // 企業名（オプション）
 }
 
-export function EmailModal({ email, isOpen, onClose }: EmailModalProps) {
+export function EmailModal({ email, isOpen, onClose, companyName }: EmailModalProps) {
   if (!isOpen || !email) return null;
 
+  // 企業名を置き換える関数
+  const replaceCompanyName = (text: string): string => {
+    if (!companyName) return text;
+    // 「〇〇株式会社」や「〇〇様」を実際の企業名に置き換え
+    return text.replace(/〇〇株式会社/g, companyName).replace(/〇〇様/g, companyName + '様');
+  };
+
+  const displaySubject = replaceCompanyName(email.subject);
+  const displayBody = replaceCompanyName(email.body);
+
   const handleCopy = () => {
-    const text = `件名: ${email.subject}\n\n${email.body}`;
+    const text = `件名: ${displaySubject}\n\n${displayBody}`;
     navigator.clipboard.writeText(text);
     alert('クリップボードにコピーしました');
   };
@@ -34,12 +45,12 @@ export function EmailModal({ email, isOpen, onClose }: EmailModalProps) {
         <div className="p-6 overflow-y-auto max-h-[60vh]">
           <div className="mb-4">
             <label className="text-sm font-semibold text-gray-700 mb-1 block">件名:</label>
-            <p className="text-sm text-gray-900 p-3 bg-gray-50 rounded">{email.subject}</p>
+            <p className="text-sm text-gray-900 p-3 bg-gray-50 rounded">{displaySubject}</p>
           </div>
           <div>
             <label className="text-sm font-semibold text-gray-700 mb-1 block">本文:</label>
             <pre className="text-sm text-gray-900 p-4 bg-gray-50 rounded whitespace-pre-wrap font-sans">
-              {email.body}
+              {displayBody}
             </pre>
           </div>
         </div>

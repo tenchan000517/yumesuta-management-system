@@ -372,3 +372,45 @@ async function findFolderByNameWithOAuth(
     return null;
   }
 }
+
+/**
+ * OAuth認証を使ってファイルを移動
+ * @param fileId 移動するファイルのID
+ * @param targetFolderId 移動先フォルダID
+ * @returns 移動後のファイル情報
+ */
+export async function moveFileWithOAuth(
+  fileId: string,
+  targetFolderId: string
+): Promise<{ id: string; name: string; webViewLink: string }> {
+  const drive = await getAuthenticatedDriveClient();
+
+  try {
+    // 現在の親フォルダを取得
+    const file = await drive.files.get({
+      fileId,
+      fields: 'id, name, parents, webViewLink',
+      supportsAllDrives: true,
+    });
+
+    const previousParents = file.data.parents?.join(',');
+
+    // ファイルを移動（親フォルダを変更）
+    const response = await drive.files.update({
+      fileId,
+      addParents: targetFolderId,
+      removeParents: previousParents,
+      fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
+    });
+
+    return {
+      id: response.data.id!,
+      name: response.data.name!,
+      webViewLink: response.data.webViewLink!,
+    };
+  } catch (error: any) {
+    console.error('Google Drive API error (moveFileWithOAuth):', error);
+    throw new Error(`Failed to move file ${fileId}: ${error.message}`);
+  }
+}
