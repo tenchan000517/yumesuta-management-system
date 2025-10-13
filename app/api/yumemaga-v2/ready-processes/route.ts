@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData } from '@/lib/google-sheets';
 
 /**
  * 日付をパース（"9/29" → Date）
@@ -52,8 +52,14 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. 新依存関係マスターを取得
-    const dependenciesData = await getSheetData(spreadsheetId, '新依存関係マスター!A1:D200');
+    // 1. バッチで必要なシートを一括取得（2つのシートを1回のAPIリクエストで取得）
+    const [dependenciesData, progressData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        '新依存関係マスター!A1:D200',
+        '進捗入力シート!A1:J1000',
+      ]
+    );
 
     if (dependenciesData.length === 0) {
       return NextResponse.json(
@@ -78,9 +84,6 @@ export async function GET(request: Request) {
     });
 
     console.log(`🔗 依存関係: ${Object.keys(dependencyMap).length}工程分を読み込み`);
-
-    // 2. 進捗入力シートから実績を取得
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A1:J1000');
 
     if (progressData.length === 0) {
       return NextResponse.json(

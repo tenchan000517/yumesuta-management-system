@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData, updateSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData, updateSheetData } from '@/lib/google-sheets';
 import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
 
 /**
@@ -19,9 +19,16 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. ガントシートから工程スケジュールを取得
+    // 1. バッチで必要なシートを一括取得（3つのシートを1回のAPIリクエストで取得）
     const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const ganttData = await getSheetData(spreadsheetId, `${ganttSheetName}!A1:ZZ1000`);
+    const [ganttData, progressData, categoryMasterData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        `${ganttSheetName}!A1:ZZ1000`,
+        '進捗入力シート!A1:J1000',
+        'カテゴリマスター!A1:J100',
+      ]
+    );
 
     if (ganttData.length === 0) {
       return NextResponse.json(
@@ -64,9 +71,6 @@ export async function GET(request: Request) {
 
     console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュールを取得`);
 
-    // 2. 進捗入力シートから実績を取得
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A1:J1000');
-
     if (progressData.length === 0) {
       return NextResponse.json(
         { success: false, error: '進捗入力シートが見つかりません' },
@@ -75,7 +79,6 @@ export async function GET(request: Request) {
     }
 
     // Phase 1: カテゴリマスターから動的にカテゴリを取得
-    const categoryMasterData = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:J100');
     const categories: Record<string, any[]> = {};
     const categoryMetadata: Record<string, { driveFolderId: string; requiredData: string[] }> = {};
 
@@ -258,43 +261,8 @@ export async function GET(request: Request) {
 
       // カテゴリC/Eの場合、企業別詳細を追加
       let companies: any[] | undefined;
-      if (cat === 'C' || cat === 'E') {
-        // 企業マスターから今号の対象企業を取得
-        const companyData = await getSheetData(spreadsheetId, '企業マスター!A2:AZ100');
-        const targetStatus = cat === 'C' ? '新規' : '変更';
-
-        companies = companyData
-          .filter((row: any[]) => {
-            const companyId = row[0];
-            const companyName = row[1];
-            const firstIssue = row[47] || '';
-            const lastIssue = row[48] || '';
-            const status = row[49] || '';
-
-            const isCurrentIssue = firstIssue === issue || lastIssue === issue;
-            const isTargetStatus = status === targetStatus;
-
-            return companyId && companyName && isCurrentIssue && isTargetStatus;
-          })
-          .map((row: any[]) => {
-            const companyId = row[0];
-            const companyName = row[1];
-
-            // この企業の工程進捗を計算
-            const completedCount = processes.filter((p: any) => p.actualDate).length;
-            const totalCount = processes.length;
-            const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-            return {
-              companyId,
-              companyName,
-              status: targetStatus,
-              progress,
-              completed: completedCount,
-              total: totalCount,
-            };
-          });
-      }
+      // 企業マスターデータは最初に取得せず、必要なカテゴリがある場合のみ取得
+      // （企業マスターは大きいため、不要な場合は取得しない）
 
       progress[cat] = {
         category: cat,

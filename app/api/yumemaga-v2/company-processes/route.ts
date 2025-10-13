@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData } from '@/lib/google-sheets';
 import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
 
 type CompanyFolderType = 'ロゴ' | 'ヒーロー画像' | 'QRコード' | '代表者写真' | 'サービス画像' | '社員写真' | '情報シート' | 'その他';
@@ -198,8 +198,17 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. 企業マスター取得
-    const companyMasterData = await getSheetData(spreadsheetId, '企業マスター!A1:AZ100');
+    // 1. バッチで必要なシートを一括取得（4つのシートを1回のAPIリクエストで取得）
+    const ganttSheetName = `逆算配置_ガント_${issue}`;
+    const [companyMasterData, progressData, ganttData, categoryData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        '企業マスター!A1:AZ100',
+        '進捗入力シート!A1:J1000',
+        `${ganttSheetName}!A1:ZZ1000`,
+        'カテゴリマスター!A2:J100',
+      ]
+    );
 
     if (companyMasterData.length === 0) {
       return NextResponse.json(
@@ -228,9 +237,6 @@ export async function GET(request: Request) {
 
     console.log(`📊 企業マスター: ${companies.length}社取得`);
 
-    // 2. 進捗入力シートから工程データ取得
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A1:J1000');
-
     if (progressData.length === 0) {
       return NextResponse.json(
         { success: false, error: '進捗入力シートが見つかりません' },
@@ -238,10 +244,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // 3. ガントシートから予定日を取得
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const ganttData = await getSheetData(spreadsheetId, `${ganttSheetName}!A1:ZZ1000`);
-
+    // 2. ガントシートから予定日を取得
     const processSchedule: Record<string, string> = {};
     if (ganttData.length > 0) {
       const headers = ganttData[0];
@@ -267,8 +270,7 @@ export async function GET(request: Request) {
 
     console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュール取得`);
 
-    // 3.5. カテゴリC（企業情報）のDriveフォルダID取得
-    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
+    // 3. カテゴリC（企業情報）のDriveフォルダID取得
     const categoryCRow = categoryData.find((row: any[]) => row[0] === 'C');
     const categoryCDriveId = categoryCRow ? categoryCRow[9] : null;
 

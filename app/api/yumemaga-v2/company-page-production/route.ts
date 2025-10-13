@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData } from '@/lib/google-sheets';
 import { ensureDirectoryWithOAuth, listFilesInFolderWithOAuth } from '@/lib/google-drive';
 
 /**
@@ -94,8 +94,17 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. 企業マスターから今号の企業を取得
-    const companyData = await getSheetData(spreadsheetId, '企業マスター!A2:AZ100');
+    // 1. バッチで必要なシートを一括取得（4つのシートを1回のAPIリクエストで取得）
+    const ganttSheetName = `逆算配置_ガント_${issue}`;
+    const [companyData, categoryData, progressData, ganttData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        '企業マスター!A2:AZ100',
+        'カテゴリマスター!A2:J100',
+        '進捗入力シート!A2:J1000',
+        `${ganttSheetName}!A1:ZZ1000`,
+      ]
+    );
 
     // 今号の企業をフィルタリング（最終更新号が今号 または 初掲載号が今号）
     const currentIssueCompanies = companyData
@@ -123,25 +132,12 @@ export async function GET(request: Request) {
 
     console.log(`📊 今号の対象企業: ${currentIssueCompanies.length}社`);
 
-    // 1.5. カテゴリC（企業情報）のDriveフォルダID取得
-    const categoryData = await getSheetData(spreadsheetId, 'カテゴリマスター!A2:J100');
+    // 2. カテゴリC（企業情報）のDriveフォルダID取得
     const categoryCRow = categoryData.find((row: any[]) => row[0] === 'C');
     const categoryCDriveId = categoryCRow ? categoryCRow[9] : null;
 
     if (!categoryCDriveId) {
       console.warn('⚠️ カテゴリCのDriveフォルダIDが見つかりません。ファイルアップロード状況の取得をスキップします。');
-    }
-
-    // 2. 進捗入力シートから工程データ取得
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A2:J1000');
-
-    // 2.5. ガントシートから予定日を取得
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    let ganttData: any[] = [];
-    try {
-      ganttData = await getSheetData(spreadsheetId, `${ganttSheetName}!A1:ZZ1000`);
-    } catch (error) {
-      console.warn(`⚠️ ガントシート取得失敗: ${ganttSheetName}`);
     }
 
     const processSchedule: Record<string, string> = {};
