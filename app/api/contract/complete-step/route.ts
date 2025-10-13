@@ -99,29 +99,29 @@ function getColumnsToUpdate(stepNumber: number, dateStr: string): Record<string,
       R: dateStr  // ステップ1完了日
     },
     2: {
-      H: dateStr,  // 契約書送付日
-      S: dateStr   // ステップ2完了日
+      S: dateStr   // ステップ2完了日（基本契約書作成）
     },
     3: {
-      I: dateStr,  // 契約書回収日
+      H: dateStr,  // 契約書送付日（基本契約書の押印・送信）
       T: dateStr   // ステップ3完了日
     },
     4: {
-      J: dateStr,  // 申込書送付日
-      U: dateStr   // ステップ4完了日
+      U: dateStr   // ステップ4完了日（申込書作成）
     },
     5: {
-      K: dateStr,  // 申込書回収日
+      J: dateStr,  // 申込書送付日（申込書の押印・送信）
       V: dateStr   // ステップ5完了日
     },
     6: {
-      W: dateStr   // ステップ6完了日
+      W: dateStr   // ステップ6完了日（重要事項説明）
     },
     7: {
+      I: dateStr,  // 契約書回収日（契約完了確認）
+      K: dateStr,  // 申込書回収日（契約完了確認）
       X: dateStr   // ステップ7完了日
     },
     8: {
-      Y: dateStr   // ステップ8完了日
+      Y: dateStr   // ステップ8完了日（請求書作成・送付）
     },
     9: {
       M: dateStr,      // 入金実績日
@@ -129,16 +129,16 @@ function getColumnsToUpdate(stepNumber: number, dateStr: string): Record<string,
       Z: dateStr       // ステップ9完了日
     },
     10: {
-      AA: dateStr  // ステップ10完了日
+      AA: dateStr  // ステップ10完了日（入金管理シート更新）
     },
     11: {
-      AB: dateStr  // ステップ11完了日
+      AB: dateStr  // ステップ11完了日（入金確認連絡・原稿依頼）
     },
     12: {
-      AC: dateStr  // ステップ12完了日
+      AC: dateStr  // ステップ12完了日（制作・校正）
     },
     13: {
-      AD: dateStr  // ステップ13完了日
+      AD: dateStr  // ステップ13完了日（掲載）
     }
   };
 

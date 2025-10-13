@@ -9,7 +9,7 @@ export async function POST(request: Request) {
 
     // 正規表現で各フィールドを抽出
     const parsed: ParsedContractForm = {
-      companyName: extractField(rawText, /企業名・団体名:\s*(.+)/, errors, '企業名'),
+      companyName: extractField(rawText, /企業名(?:・団体名)?[：:\s]*(.+)/, errors, '企業名'),
       representativeTitle: extractField(rawText, /代表者役職:\s*(.+)/, errors, '代表者役職'),
       representativeName: extractField(rawText, /代表者名:\s*(.+)/, errors, '代表者名'),
       address: extractField(rawText, /住所:〒?\s*(.+)/, errors, '住所'),

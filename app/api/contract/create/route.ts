@@ -45,22 +45,22 @@ export async function POST(request: Request) {
     // 契約企業マスタの詳細情報を更新
     await updateCompanyMaster(sheets, spreadsheetId, parsedData, companyId);
 
-    // 2. 契約・入金管理シートで該当企業の行を検索
+    // 2. 契約・入金管理シートで該当企業の行を検索（企業IDのみで検索、D列の有無は問わない）
     const sheetName = '契約・入金管理';
     const contractSheet = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A:D`
+      range: `${sheetName}!A:P`
     });
 
     const rows = contractSheet.data.values || [];
 
-    // B列（企業ID）が一致し、D列が空欄の行を検索
+    // B列（企業ID）が一致する最初の行を検索
     let targetRowIndex = -1;
     let contractId = -1;
 
     for (let i = 2; i < rows.length; i++) {
       const row = rows[i];
-      if (row && parseInt(row[1]) === companyId && !row[3]) { // B列=企業ID, D列=空欄
+      if (row && parseInt(row[1]) === companyId) { // B列=企業ID
         targetRowIndex = i + 1;
         contractId = parseInt(row[0]) || (i - 1);
         break;
@@ -74,37 +74,64 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. 契約詳細を更新（D列以降）
-    const updateValues = [
-      'ゆめマガ',                                // D: 契約サービス
-      parsedData.contractDate,                  // E: 契約日
-      `¥${parsedData.annualFee.toLocaleString()}`, // F: 契約金額
-      '一括',                                   // G: 入金方法
-      '',                                       // H: 契約書送付
-      '',                                       // I: 契約書回収
-      '',                                       // J: 申込書送付
-      '',                                       // K: 申込書回収
-      parsedData.paymentDeadline,               // L: 入金予定日
-      '',                                       // M: 入金実績日
-      '未入金',                                 // N: 入金ステータス
-      '',                                       // O: 遅延日数
-      parsedData.publicationStart,              // P: 掲載開始号
-      ''                                        // Q: 備考
-    ];
+    // 3. 契約詳細を更新
+    // D列が空欄の場合：全項目を更新
+    // D列に値がある場合：L列（入金予定日）とP列（掲載開始号）のみ更新
+    const currentRow = rows[targetRowIndex - 1];
+    const hasContractService = currentRow[3]; // D列
 
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${sheetName}!D${targetRowIndex}:Q${targetRowIndex}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [updateValues]
-      }
-    });
+    if (!hasContractService) {
+      // D列が空欄の場合：全項目を更新
+      const updateValues = [
+        'ゆめマガ',                                // D: 契約サービス
+        parsedData.contractDate,                  // E: 契約日
+        `¥${parsedData.annualFee.toLocaleString()}`, // F: 契約金額
+        '一括',                                   // G: 入金方法
+        '',                                       // H: 契約書送付
+        '',                                       // I: 契約書回収
+        '',                                       // J: 申込書送付
+        '',                                       // K: 申込書回収
+        parsedData.paymentDeadline,               // L: 入金予定日
+        '',                                       // M: 入金実績日
+        '未入金',                                 // N: 入金ステータス
+        '',                                       // O: 遅延日数
+        parsedData.publicationStart,              // P: 掲載開始号
+        ''                                        // Q: 備考
+      ];
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!D${targetRowIndex}:Q${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [updateValues]
+        }
+      });
+    } else {
+      // D列に値がある場合：L列（入金予定日）とP列（掲載開始号）のみ更新
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!L${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[parsedData.paymentDeadline]]
+        }
+      });
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!P${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[parsedData.publicationStart]]
+        }
+      });
+    }
 
     return NextResponse.json({
       success: true,
       contractId,
-      companyId: rows[targetRowIndex - 1][1] // B列の企業ID
+      companyId: currentRow[1] // B列の企業ID
     });
 
   } catch (error) {
@@ -154,21 +181,31 @@ async function updateCompanyMaster(
     throw new Error('契約企業マスタに該当する企業が見つかりません');
   }
 
+  // 元々のB列の値（略称として保存）
+  const currentRow = existingData.data.values[targetRowIndex - 1];
+  const originalName = currentRow[1] || ''; // B列
+
   // 郵便番号を住所から抽出（〒XXX-XXXX形式）
   const postalCodeMatch = parsedData.address.match(/〒?(\d{3}-\d{4})/);
   const postalCode = postalCodeMatch ? postalCodeMatch[1] : '';
+
+  // 住所から郵便番号部分を削除
+  const addressWithoutPostalCode = parsedData.address
+    .replace(/^〒?\d{3}-\d{4}\s*/, '') // 先頭の郵便番号を削除
+    .trim();
 
   // 今日の日付（YYYY/MM/DD形式）
   const today = new Date();
   const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
 
-  // 詳細情報を更新（C列以降）
+  // 詳細情報を更新（B列〜V列）
   const updateValues = [
-    '',                              // C: 企業略称
+    parsedData.companyName,          // B: 企業正式名称（新しい正式名称で上書き）
+    originalName,                    // C: 企業略称（元々のB列の値を保存）
     parsedData.representativeTitle,  // D: 代表者役職
     parsedData.representativeName,   // E: 代表者名
     postalCode,                      // F: 郵便番号
-    parsedData.address,              // G: 住所
+    addressWithoutPostalCode,        // G: 住所（郵便番号を除いたもの）
     parsedData.phone,                // H: 電話番号
     '',                              // I: FAX番号
     parsedData.email,                // J: メールアドレス
@@ -188,7 +225,7 @@ async function updateCompanyMaster(
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `${sheetName}!C${targetRowIndex}:V${targetRowIndex}`,
+    range: `${sheetName}!B${targetRowIndex}:V${targetRowIndex}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [updateValues]

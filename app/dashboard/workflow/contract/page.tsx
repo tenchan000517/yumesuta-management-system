@@ -206,18 +206,6 @@ export default function ContractWorkflowPage() {
     }));
   };
 
-  // ステータス更新
-  const handleUpdateStatus = (stepNumber: number, status: StepStatus) => {
-    setSteps(prevSteps => prevSteps.map(step => {
-      if (step.stepNumber === stepNumber) {
-        const updatedStep = { ...step, status };
-        setSelectedStep(updatedStep);
-        return updatedStep;
-      }
-      return step;
-    }));
-  };
-
   // メール例文モーダルを開く
   const handleOpenEmailModal = (templateId: string) => {
     // 情報収集フォームの場合
@@ -246,14 +234,25 @@ export default function ContractWorkflowPage() {
         if (result.success) {
           setSelectedContract(result.contract);
 
-          // 進捗状況をステップに反映
+          // チェックリスト取得
+          const checklistResponse = await fetch(`/api/contract/checklist/${selectedContract.id}`);
+          const checklistResult = await checklistResponse.json();
+
+          // 進捗状況 + チェックリストをステップに反映
           const updatedSteps = contractWorkflowSteps.map(step => {
             const completedAtKey = `step${step.stepNumber}CompletedAt` as keyof ContractData;
             const completedAt = result.contract[completedAtKey];
+
+            // チェックリストを反映
+            const updatedChecklist = step.checklist.map(item => ({
+              ...item,
+              checked: checklistResult.success && checklistResult.checklist[item.id] ? checklistResult.checklist[item.id] : false,
+            }));
+
             return {
               ...step,
               status: completedAt ? ('completed' as StepStatus) : ('pending' as StepStatus),
-              checklist: step.checklist
+              checklist: updatedChecklist
             };
           });
           setSteps(updatedSteps);
@@ -422,7 +421,6 @@ export default function ContractWorkflowPage() {
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
         onUpdateChecklist={handleUpdateChecklist}
-        onUpdateStatus={handleUpdateStatus}
         onOpenEmailModal={handleOpenEmailModal}
         companyId={selectedContract?.companyId}
         contractId={selectedContract?.id}
@@ -442,6 +440,14 @@ export default function ContractWorkflowPage() {
       <InformationFormModal
         isOpen={isInformationFormModalOpen}
         onClose={() => setIsInformationFormModalOpen(false)}
+        contractId={selectedContract?.id}
+        onSuccess={() => {
+          // 契約情報を再取得
+          fetchContracts();
+          if (selectedContract) {
+            handleSelectContract(selectedContract.id);
+          }
+        }}
       />
 
       {/* 新規契約作成モーダル */}

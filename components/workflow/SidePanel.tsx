@@ -3,15 +3,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, ExternalLink, Square, CheckSquare, Building2, MapPin, Phone, User, CheckCircle2, Upload, FileText } from 'lucide-react';
-import type { WorkflowStep, StepStatus, CompanyMasterData } from '@/types/workflow';
-import { emailTemplates } from '@/data/email-templates';
+import type { WorkflowStep, CompanyMasterData } from '@/types/workflow';
 
 interface SidePanelProps {
   step: WorkflowStep | null;
   isOpen: boolean;
   onClose: () => void;
   onUpdateChecklist: (itemId: string) => void;
-  onUpdateStatus: (stepNumber: number, status: StepStatus) => void;
   onOpenEmailModal: (templateId: string) => void;
   companyId?: number; // 企業ID（Phase 1.6で追加）
   contractId?: number; // 契約ID（Phase 2.1で追加）
@@ -24,7 +22,6 @@ export function SidePanel({
   isOpen,
   onClose,
   onUpdateChecklist,
-  onUpdateStatus,
   onOpenEmailModal,
   companyId,
   contractId,
@@ -262,10 +259,6 @@ export function SidePanel({
 
   if (!isOpen || !step) return null;
 
-  const handleStatusChange = (newStatus: StepStatus) => {
-    onUpdateStatus(step.stepNumber, newStatus);
-  };
-
   return (
     <>
       {/* 背景オーバーレイ */}
@@ -303,38 +296,35 @@ export function SidePanel({
             </button>
           </div>
 
-          {/* ステータス変更ボタン */}
+          {/* ステータス表示（読み取り専用） */}
           <div className="flex gap-2">
-            <button
-              onClick={() => handleStatusChange('pending')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            <div
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-center transition-opacity ${
                 step.status === 'pending'
-                  ? 'bg-gray-200 text-gray-900'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-gray-200 text-gray-900 opacity-100'
+                  : 'bg-gray-100 text-gray-400 opacity-50'
               }`}
             >
               未着手
-            </button>
-            <button
-              onClick={() => handleStatusChange('in_progress')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            </div>
+            <div
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-center transition-opacity ${
                 step.status === 'in_progress'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                  ? 'bg-blue-500 text-white opacity-100'
+                  : 'bg-blue-100 text-blue-400 opacity-50'
               }`}
             >
               進行中
-            </button>
-            <button
-              onClick={() => handleStatusChange('completed')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            </div>
+            <div
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-center transition-opacity ${
                 step.status === 'completed'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-green-100 text-green-600 hover:bg-green-200'
+                  ? 'bg-green-500 text-white opacity-100'
+                  : 'bg-green-100 text-green-400 opacity-50'
               }`}
             >
               完了
-            </button>
+            </div>
           </div>
         </div>
 
@@ -881,12 +871,12 @@ export function SidePanel({
 function getUpdateInfo(stepNumber: number): string[] {
   const mapping: Record<number, string[]> = {
     1: ['ステップ1完了日（R列）'],
-    2: ['契約書送付日（H列）', 'ステップ2完了日（S列）'],
-    3: ['契約書回収日（I列）', 'ステップ3完了日（T列）'],
-    4: ['申込書送付日（J列）', 'ステップ4完了日（U列）'],
-    5: ['申込書回収日（K列）', 'ステップ5完了日（V列）'],
+    2: ['ステップ2完了日（S列）'],
+    3: ['契約書送付日（H列）', 'ステップ3完了日（T列）'],
+    4: ['ステップ4完了日（U列）'],
+    5: ['申込書送付日（J列）', 'ステップ5完了日（V列）'],
     6: ['ステップ6完了日（W列）'],
-    7: ['ステップ7完了日（X列）'],
+    7: ['契約書回収日（I列）', '申込書回収日（K列）', 'ステップ7完了日（X列）'],
     8: ['ステップ8完了日（Y列）'],
     9: ['入金実績日（M列）', '入金ステータス（N列）: 入金済', 'ステップ9完了日（Z列）'],
     10: ['ステップ10完了日（AA列）'],
