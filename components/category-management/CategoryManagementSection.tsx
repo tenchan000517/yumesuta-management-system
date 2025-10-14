@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Save, Folder, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Folder, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 interface Process {
   id: string;
@@ -54,6 +54,8 @@ export function CategoryManagementSection({
   const [showCategoryCards, setShowCategoryCards] = useState(false);
   const [editingActualDates, setEditingActualDates] = useState<Record<string, string>>({});
   const [editingPlannedDates, setEditingPlannedDates] = useState<Record<string, string>>({});
+  const [loadingProcesses, setLoadingProcesses] = useState<Record<string, boolean>>({});
+  const [loadingCategories, setLoadingCategories] = useState<Record<string, boolean>>({});
 
   // 今日の日付を M/D 形式で取得
   const getTodayDate = () => {
@@ -62,9 +64,14 @@ export function CategoryManagementSection({
   };
 
   // 実績日の完了ボタンをクリック
-  const handleCompleteActualDate = (processId: string) => {
-    const todayDate = getTodayDate();
-    onUpdateActualDate?.(processId, todayDate);
+  const handleCompleteActualDate = async (processId: string) => {
+    setLoadingProcesses(prev => ({ ...prev, [processId]: true }));
+    try {
+      const todayDate = getTodayDate();
+      await onUpdateActualDate?.(processId, todayDate);
+    } finally {
+      setLoadingProcesses(prev => ({ ...prev, [processId]: false }));
+    }
   };
 
   // 実績日の保存ボタンをクリック
@@ -92,8 +99,13 @@ export function CategoryManagementSection({
   };
 
   // カテゴリを内部チェックへ遷移
-  const handleMoveToInternalCheck = (categoryId: string) => {
-    onUpdateConfirmation?.(categoryId, '内部チェック');
+  const handleMoveToInternalCheck = async (categoryId: string) => {
+    setLoadingCategories(prev => ({ ...prev, [categoryId]: true }));
+    try {
+      await onUpdateConfirmation?.(categoryId, '内部チェック');
+    } finally {
+      setLoadingCategories(prev => ({ ...prev, [categoryId]: false }));
+    }
   };
 
   // 全体進捗を計算（カテゴリZを除く全カテゴリの平均）
@@ -248,7 +260,9 @@ export function CategoryManagementSection({
               const plannedDate = new Date(today.getFullYear(), month - 1, day);
               return plannedDate < today;
             })();
-            const isCompletedCategory = confirmationStatus[category.id] === '内部チェック' || confirmationStatus[category.id] === '確認送付済';
+            // 内部チェック以降のすべてのステータスで緑カードにする
+            const isCompletedCategory = confirmationStatus[category.id] &&
+                                       confirmationStatus[category.id] !== '制作中';
 
             return (
             <div
@@ -300,9 +314,17 @@ export function CategoryManagementSection({
                  (!confirmationStatus[category.id] || confirmationStatus[category.id] === '制作中') && (
                   <button
                     onClick={() => handleMoveToInternalCheck(category.id)}
-                    className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm"
+                    disabled={loadingCategories[category.id]}
+                    className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    ✓ 内部チェックへ進む
+                    {loadingCategories[category.id] ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        処理中...
+                      </>
+                    ) : (
+                      <>✓ 内部チェックへ進む</>
+                    )}
                   </button>
                 )}
               </div>
@@ -498,10 +520,18 @@ export function CategoryManagementSection({
                                 {!process.actualDate && editingActualDates[process.id] === undefined ? (
                                   <button
                                     onClick={() => handleCompleteActualDate(process.id)}
-                                    className="px-3 py-1.5 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors whitespace-nowrap"
+                                    disabled={loadingProcesses[process.id]}
+                                    className="px-3 py-1.5 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                     title="今日の日付で完了"
                                   >
-                                    完了
+                                    {loadingProcesses[process.id] ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        処理中
+                                      </>
+                                    ) : (
+                                      '完了'
+                                    )}
                                   </button>
                                 ) : editingActualDates[process.id] !== undefined && editingActualDates[process.id] !== process.actualDate ? (
                                   <button

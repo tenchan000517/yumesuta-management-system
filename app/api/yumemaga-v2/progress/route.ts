@@ -100,7 +100,7 @@ export async function GET(request: Request) {
     });
 
     // Phase 3: 内部チェック・確認送付工程は確認ステータス取得のために別管理
-    const confirmationProcesses: Record<string, any> = {};
+    const confirmationProcesses: Record<string, { internalCheck?: any; confirmation?: any }> = {};
 
     progressData.slice(1).forEach((row, index) => {
       const processNo = row[0]; // A列: 工程No
@@ -124,16 +124,36 @@ export async function GET(request: Request) {
 
       // 内部チェック・確認送付・修正対応工程は確認ステータス取得用に別管理（カードには表示しない）
       // + 追加可能期間系の工程も除外
-      if (cleanProcessName.includes('内部チェック') ||
-          cleanProcessName.includes('確認送付') ||
-          cleanProcessName.includes('修正対応') ||
+      if (cleanProcessName.includes('確認送付')) {
+        // 確認送付工程を優先的に記録
+        if (!confirmationProcesses[prefix]) {
+          confirmationProcesses[prefix] = {};
+        }
+        // 最初の確認送付工程のみ記録（既に記録されている場合は上書きしない）
+        if (!confirmationProcesses[prefix].confirmation) {
+          confirmationProcesses[prefix].confirmation = {
+            confirmationStatus: row[7] || '制作中',
+            rowIndex: index + 2,
+          };
+        }
+        return;
+      } else if (cleanProcessName.includes('内部チェック')) {
+        // 内部チェック工程を記録
+        if (!confirmationProcesses[prefix]) {
+          confirmationProcesses[prefix] = {};
+        }
+        if (!confirmationProcesses[prefix].internalCheck) {
+          confirmationProcesses[prefix].internalCheck = {
+            confirmationStatus: row[7] || '制作中',
+            rowIndex: index + 2,
+          };
+        }
+        return;
+      } else if (cleanProcessName.includes('修正対応') ||
           cleanProcessName.includes('追加可能期間') ||
           cleanProcessName.includes('修正変更対応可能期間') ||
           cleanProcessName.includes('パートナー修正変更対応可能期間')) {
-        confirmationProcesses[prefix] = {
-          confirmationStatus: row[7] || '制作中',
-          rowIndex: index + 2,
-        };
+        // これらの工程は表示から除外するだけ
         return;
       }
 
@@ -236,9 +256,17 @@ export async function GET(request: Request) {
       const progressRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
       // Phase 3: カテゴリ別の確認送付ステータスを取得（別管理のconfirmationProcessesから）
+      // 確認送付工程を優先、なければ内部チェック工程を使用
       const confirmationData = confirmationProcesses[cat];
-      const categoryConfirmationStatus = confirmationData?.confirmationStatus || '制作中';
-      const confirmationProcessRowIndex = confirmationData?.rowIndex || -1;
+      const confirmationProcess = confirmationData?.confirmation || confirmationData?.internalCheck;
+      const categoryConfirmationStatus = confirmationProcess?.confirmationStatus || '制作中';
+      const confirmationProcessRowIndex = confirmationProcess?.rowIndex || -1;
+
+      // デバッグログ
+      if (confirmationData) {
+        const usedType = confirmationData.confirmation ? '確認送付' : confirmationData.internalCheck ? '内部チェック' : 'なし';
+        console.log(`📋 カテゴリ${cat}: ${usedType}工程のステータス = ${categoryConfirmationStatus}`);
+      }
 
       // Phase 3: 自動ステータス遷移ロジックは一旦コメントアウト（デバッグ後に有効化）
       // TODO: 制作工程100%完了時に自動的に「内部チェック」に遷移

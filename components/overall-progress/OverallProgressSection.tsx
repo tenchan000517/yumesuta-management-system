@@ -1,6 +1,7 @@
 'use client';
 
-import { CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Category {
   id: string;
@@ -60,6 +61,18 @@ export function OverallProgressSection({
   categories,
   onUpdateConfirmationStatus,
 }: OverallProgressSectionProps) {
+  const [loadingCategories, setLoadingCategories] = useState<Record<string, boolean>>({});
+
+  // ステータス変更ハンドラー（ローディング表示付き）
+  const handleStatusChange = async (categoryId: string, status: string) => {
+    setLoadingCategories(prev => ({ ...prev, [categoryId]: true }));
+    try {
+      await onUpdateConfirmationStatus(categoryId, status);
+    } finally {
+      setLoadingCategories(prev => ({ ...prev, [categoryId]: false }));
+    }
+  };
+
   // Z以外のカテゴリを表示
   const displayCategories = categories.filter(c => c.id !== 'Z');
 
@@ -89,17 +102,31 @@ export function OverallProgressSection({
             {/* ステータス選択 */}
             <div className="p-4">
               <h4 className="font-semibold text-sm text-gray-900 mb-2">ステータス変更</h4>
-              <select
-                value={category.confirmationStatus}
-                onChange={(e) => onUpdateConfirmationStatus(category.id, e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="制作中">制作中</option>
-                <option value="内部チェック">内部チェック</option>
-                <option value="確認送付">確認送付</option>
-                <option value="確認待ち">確認待ち</option>
-                <option value="確認OK">確認OK</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={category.confirmationStatus}
+                  onChange={(e) => handleStatusChange(category.id, e.target.value)}
+                  disabled={loadingCategories[category.id]}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="制作中">制作中</option>
+                  <option value="内部チェック">内部チェック</option>
+                  <option value="確認送付">確認送付</option>
+                  <option value="確認待ち">確認待ち</option>
+                  <option value="確認OK">確認OK</option>
+                </select>
+                {loadingCategories[category.id] && (
+                  <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  </div>
+                )}
+              </div>
+              {loadingCategories[category.id] && (
+                <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  更新中...
+                </p>
+              )}
             </div>
 
             {/* 内部チェックアシスト（内部チェックステータスの場合のみ表示） */}

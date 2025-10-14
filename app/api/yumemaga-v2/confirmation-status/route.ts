@@ -36,7 +36,10 @@ export async function PUT(request: Request) {
     const isCategoryId = !processNo.includes('-');
 
     if (isCategoryId) {
-      // カテゴリIDの場合、工程名に「確認送付」が含まれる工程を更新
+      // カテゴリIDの場合、ステータスに応じて更新対象の工程を決定
+      // - '内部チェック' → 「内部チェック」工程を更新
+      // - それ以外 → 「確認送付」工程を更新
+      const targetKeyword = status === '内部チェック' ? '内部チェック' : '確認送付';
       const targetRows: number[] = [];
 
       progressData.forEach((row, i) => {
@@ -45,16 +48,16 @@ export async function PUT(request: Request) {
         const rowProcessName = row[1]; // B列: 工程名
         const rowIssue = row[3]; // D列: 月号
 
-        // カテゴリIDで始まり、工程名に「確認送付」が含まれる行
+        // カテゴリIDで始まり、工程名に対象キーワードが含まれる行
         const categoryPrefix = rowProcessNo?.split('-')[0];
-        if (categoryPrefix === processNo && rowProcessName?.includes('確認送付') && (rowIssue === issue || !rowIssue)) {
+        if (categoryPrefix === processNo && rowProcessName?.includes(targetKeyword) && (rowIssue === issue || !rowIssue)) {
           targetRows.push(i + 1); // 1-indexed行番号
         }
       });
 
       if (targetRows.length === 0) {
         return NextResponse.json(
-          { success: false, error: `カテゴリ ${processNo} で「確認送付」工程が見つかりません` },
+          { success: false, error: `カテゴリ ${processNo} で「${targetKeyword}」工程が見つかりません` },
           { status: 404 }
         );
       }
@@ -68,7 +71,7 @@ export async function PUT(request: Request) {
         );
       }
 
-      console.log(`✅ 先方確認ステータスを更新: カテゴリ ${processNo} (${targetRows.length}工程) → ${status}`);
+      console.log(`✅ 先方確認ステータスを更新: カテゴリ ${processNo} の「${targetKeyword}」工程 (${targetRows.length}件) → ${status}`);
 
       return NextResponse.json({
         success: true,
