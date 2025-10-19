@@ -32,11 +32,11 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
           </p>
         </div>
 
-        {/* 過去3ヶ月の平均売上 */}
+        {/* 過去3ヶ月の平均入金 */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-5 h-5 text-blue-600" />
-            <h4 className="font-medium text-blue-700">平均売上（過去3ヶ月）</h4>
+            <h4 className="font-medium text-blue-700">平均入金（過去3ヶ月）</h4>
           </div>
           <p className="text-2xl font-bold text-blue-600">
             {formatCurrency(data.historicalAverage.revenue)}円
@@ -69,7 +69,7 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
                   月
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
-                  予測売上
+                  予定入金
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
                   予測経費
@@ -136,7 +136,7 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
         <p className="font-medium mb-1">予測の前提条件</p>
         <ul className="list-disc list-inside space-y-1 text-xs">
-          <li>売上・経費・給与は過去3ヶ月の平均値を使用</li>
+          <li>入金・経費・給与は過去3ヶ月の平均値を使用</li>
           <li>固定費は現在の値が継続すると仮定</li>
           <li>季節性や特別な要因は考慮していません</li>
           <li>あくまで参考値であり、実際の結果とは異なる場合があります</li>
