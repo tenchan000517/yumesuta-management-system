@@ -13,7 +13,7 @@ export async function GET(
     // 契約・入金管理シートから全データ取得
     const contractSheet = await getSheetData(
       process.env.SALES_SPREADSHEET_ID!,
-      '契約・入金管理!A:AD'
+      '契約・入金管理!A:AH'
     );
 
     // 該当行を検索（タイトル行とヘッダー行をスキップ）
@@ -45,20 +45,25 @@ export async function GET(
       delayDays: parseInt(row[14]) || undefined,     // O列
       publicationIssue: row[15],         // P列
       notes: row[16] || undefined,       // Q列
-      // 進捗管理列（R〜AD列）
-      step1CompletedAt: row[17] || undefined,   // R列
-      step2CompletedAt: row[18] || undefined,   // S列
-      step3CompletedAt: row[19] || undefined,   // T列
-      step4CompletedAt: row[20] || undefined,   // U列
-      step5CompletedAt: row[21] || undefined,   // V列
-      step6CompletedAt: row[22] || undefined,   // W列
-      step7CompletedAt: row[23] || undefined,   // X列
-      step8CompletedAt: row[24] || undefined,   // Y列
-      step9CompletedAt: row[25] || undefined,   // Z列
-      step10CompletedAt: row[26] || undefined,  // AA列
-      step11CompletedAt: row[27] || undefined,  // AB列
-      step12CompletedAt: row[28] || undefined,  // AC列
-      step13CompletedAt: row[29] || undefined   // AD列
+      // 財務諸表用フィールド（R〜U列）
+      contractStartDate: row[17] || undefined,        // R列
+      contractPeriodMonths: parseInt(row[18]) || undefined, // S列
+      autoRenewal: row[19] || undefined,              // T列
+      autoRenewalAmount: row[20] || undefined,        // U列
+      // 進捗管理列（V〜AH列）
+      step1CompletedAt: row[21] || undefined,   // V列
+      step2CompletedAt: row[22] || undefined,   // W列
+      step3CompletedAt: row[23] || undefined,   // X列
+      step4CompletedAt: row[24] || undefined,   // Y列
+      step5CompletedAt: row[25] || undefined,   // Z列
+      step6CompletedAt: row[26] || undefined,   // AA列
+      step7CompletedAt: row[27] || undefined,   // AB列
+      step8CompletedAt: row[28] || undefined,   // AC列
+      step9CompletedAt: row[29] || undefined,   // AD列
+      step10CompletedAt: row[30] || undefined,  // AE列
+      step11CompletedAt: row[31] || undefined,  // AF列
+      step12CompletedAt: row[32] || undefined,  // AG列
+      step13CompletedAt: row[33] || undefined   // AH列
     };
 
     return NextResponse.json({

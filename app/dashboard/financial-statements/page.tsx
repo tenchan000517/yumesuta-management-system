@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation';
 import { PLDisplay } from '@/components/financial-statements/PLDisplay';
 import { BSDisplay } from '@/components/financial-statements/BSDisplay';
 import { CFDisplay } from '@/components/financial-statements/CFDisplay';
-import type { ProfitAndLoss, BalanceSheet, CashFlowStatement } from '@/types/financial';
+import { CashDepletionAlert } from '@/components/financial-statements/CashDepletionAlert';
+import { FutureCashFlowPrediction } from '@/components/financial-statements/FutureCashFlowPrediction';
+import type { ProfitAndLoss, BalanceSheet, CashFlowStatement, FuturePredictionResponse } from '@/types/financial';
 
 export default function FinancialStatementsPage() {
   const router = useRouter();
@@ -16,8 +18,11 @@ export default function FinancialStatementsPage() {
   const [plData, setPlData] = useState<ProfitAndLoss | null>(null);
   const [bsData, setBsData] = useState<BalanceSheet | null>(null);
   const [cfData, setCfData] = useState<CashFlowStatement | null>(null);
+  const [futurePrediction, setFuturePrediction] = useState<FuturePredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [predictionLoading, setPredictionLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [predictionMonths, setPredictionMonths] = useState(6); // 予測期間（デフォルト6ヶ月）
 
   // フィルター（年月・年次切り替え）
   const currentDate = new Date();
@@ -28,7 +33,11 @@ export default function FinancialStatementsPage() {
   // 初回マウント時にデータ取得
   useEffect(() => {
     fetchFinancialStatements();
-  }, [selectedYear, selectedMonth, isAnnual]);
+    // 月次表示時のみ未来予測を取得
+    if (!isAnnual && selectedMonth !== null) {
+      fetchFuturePrediction();
+    }
+  }, [selectedYear, selectedMonth, isAnnual, predictionMonths]);
 
   // 財務諸表データ取得
   const fetchFinancialStatements = async () => {
@@ -64,9 +73,35 @@ export default function FinancialStatementsPage() {
     );
   };
 
+  // 未来予測データ取得
+  const fetchFuturePrediction = async () => {
+    if (isAnnual || selectedMonth === null) return;
+
+    setPredictionLoading(true);
+    try {
+      const response = await fetch(
+        `/api/financial-statements/future-prediction?year=${selectedYear}&month=${selectedMonth}&months=${predictionMonths}`
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setFuturePrediction(result.data || null);
+      } else {
+        console.error('未来予測取得エラー:', result.error);
+      }
+    } catch (error) {
+      console.error('未来予測取得エラー:', error);
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
+
   // 更新ボタン
   const handleRefresh = () => {
     fetchFinancialStatements();
+    if (!isAnnual && selectedMonth !== null) {
+      fetchFuturePrediction();
+    }
   };
 
   // 年次・月次切り替え
@@ -193,6 +228,52 @@ export default function FinancialStatementsPage() {
 
         {/* キャッシュフロー計算書 */}
         <CFDisplay data={cfData} loading={loading} year={selectedYear} month={selectedMonth || undefined} />
+
+        {/* 未来予測（月次表示時のみ） */}
+        {!isAnnual && selectedMonth !== null && (
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-gray-900">未来予測</h2>
+                <span className="text-sm text-gray-500">
+                  （過去3ヶ月の平均から{predictionMonths}ヶ月先まで予測）
+                </span>
+              </div>
+
+              {/* 予測期間選択 */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">予測期間:</label>
+                <select
+                  value={predictionMonths}
+                  onChange={(e) => setPredictionMonths(Number(e.target.value))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value={3}>3ヶ月</option>
+                  <option value={6}>6ヶ月</option>
+                  <option value={12}>12ヶ月</option>
+                  <option value={24}>24ヶ月</option>
+                </select>
+              </div>
+            </div>
+
+            {predictionLoading ? (
+              <div className="animate-pulse space-y-4">
+                <div className="h-20 bg-gray-200 rounded"></div>
+                <div className="h-64 bg-gray-200 rounded"></div>
+              </div>
+            ) : futurePrediction ? (
+              <div className="space-y-6">
+                {/* 現金枯渇警告 */}
+                <CashDepletionAlert warning={futurePrediction.cashDepletionWarning} />
+
+                {/* 予測テーブル */}
+                <FutureCashFlowPrediction data={futurePrediction} />
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">データがありません</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

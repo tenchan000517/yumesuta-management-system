@@ -60,20 +60,26 @@ export interface ContractData {
   publicationIssue: string;        // P列
   notes?: string;                  // Q列
 
-  // Phase 1.5追加: 進捗管理フィールド（R〜AD列）
-  step1CompletedAt?: string;       // R列
-  step2CompletedAt?: string;       // S列
-  step3CompletedAt?: string;       // T列
-  step4CompletedAt?: string;       // U列
-  step5CompletedAt?: string;       // V列
-  step6CompletedAt?: string;       // W列
-  step7CompletedAt?: string;       // X列
-  step8CompletedAt?: string;       // Y列
-  step9CompletedAt?: string;       // Z列
-  step10CompletedAt?: string;      // AA列
-  step11CompletedAt?: string;      // AB列
-  step12CompletedAt?: string;      // AC列
-  step13CompletedAt?: string;      // AD列
+  // 財務諸表用フィールド（R〜U列）
+  contractStartDate?: string;      // R列（契約開始日）
+  contractPeriodMonths?: number;   // S列（契約期間、月数）
+  autoRenewal?: string;            // T列（自動更新有無: ○/✖）
+  autoRenewalAmount?: string;      // U列（自動更新後の金額）
+
+  // Phase 1.5追加: 進捗管理フィールド（V〜AH列）
+  step1CompletedAt?: string;       // V列
+  step2CompletedAt?: string;       // W列
+  step3CompletedAt?: string;       // X列
+  step4CompletedAt?: string;       // Y列
+  step5CompletedAt?: string;       // Z列
+  step6CompletedAt?: string;       // AA列
+  step7CompletedAt?: string;       // AB列
+  step8CompletedAt?: string;       // AC列
+  step9CompletedAt?: string;       // AD列
+  step10CompletedAt?: string;      // AE列
+  step11CompletedAt?: string;      // AF列
+  step12CompletedAt?: string;      // AG列
+  step13CompletedAt?: string;      // AH列
 }
 
 export interface WorkflowState {

@@ -8,7 +8,10 @@ import type {
   CashFlowStatement,
   PaymentItem,
   WeeklyItem,
-  DailyCashFlowItem
+  DailyCashFlowItem,
+  MonthlyPrediction,
+  CashDepletionWarning,
+  FuturePredictionResponse
 } from '@/types/financial';
 
 /**
@@ -40,6 +43,15 @@ function isDateBeforeOrEqual(dateStr: string, targetDate: string): boolean {
   const date = new Date(dateStr);
   const target = new Date(targetDate);
   return date <= target;
+}
+
+/**
+ * 日付にN月を加算
+ */
+function addMonths(dateStr: string, months: number): Date {
+  const date = new Date(dateStr);
+  date.setMonth(date.getMonth() + months);
+  return date;
 }
 
 /**
@@ -122,20 +134,76 @@ export async function calculateProfitAndLoss(
   const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
 
   // 1. 売上高の計算（契約・入金管理シートから）
-  // M列（入金実績日）が対象期間内のレコードを抽出し、F列（契約金額）を合計
-  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:P');
+  // 契約期間ベースで売上を認識（発生主義会計）
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:AH');
 
   let revenue = 0;
-  contractData.slice(1).forEach(row => {
-    const paymentActualDate = row[12]; // M列（入金実績日）
-    const amount = parseAmount(row[5]); // F列（契約金額）
+  contractData.slice(2).forEach(row => {
+    const contractStartDate = row[17] || row[4]; // R列（契約開始日）、なければE列（契約日）を使用
+    const contractAmount = parseAmount(row[5]); // F列（契約金額）
+    const contractPeriodMonths = parseInt(row[18]) || 12; // S列（契約期間、月数）、デフォルト12ヶ月
+    const autoRenewal = row[19]; // T列（自動更新有無: ○/✖）
+    const autoRenewalAmount = parseAmount(row[20]); // U列（自動更新後の金額）
 
-    const isInPeriod = month !== undefined
-      ? isDateInMonth(paymentActualDate, year, month)
-      : isDateInFiscalYear(paymentActualDate, year);
+    if (!contractStartDate || contractAmount === 0) return;
 
-    if (isInPeriod) {
-      revenue += amount;
+    // 月額売上 = 契約金額 ÷ 契約期間
+    const monthlyRevenue = contractAmount / contractPeriodMonths;
+
+    // 契約期間の各月に月額売上を計上
+    for (let i = 0; i < contractPeriodMonths; i++) {
+      const revenueDate = addMonths(contractStartDate, i);
+      const revenueYear = revenueDate.getFullYear();
+      const revenueMonth = revenueDate.getMonth() + 1;
+
+      const isInPeriod = month !== undefined
+        ? (revenueYear === year && revenueMonth === month)
+        : isDateInFiscalYear(`${revenueYear}/${String(revenueMonth).padStart(2, '0')}/01`, year);
+
+      if (isInPeriod) {
+        revenue += monthlyRevenue;
+      }
+    }
+
+    // 自動更新ロジック（○または〇で判定）
+    if ((autoRenewal === '○' || autoRenewal === '〇') && autoRenewalAmount > 0) {
+      // 契約期間終了月を計算
+      const contractEndDate = addMonths(contractStartDate, contractPeriodMonths);
+
+      // 自動更新後の月額売上
+      const renewalMonthlyRevenue = autoRenewalAmount;
+
+      if (month !== undefined) {
+        // 月次計算の場合: 契約期間終了後かつ対象月である場合のみ計上
+        const targetDate = new Date(year, month - 1, 1);
+        const contractEndYear = contractEndDate.getFullYear();
+        const contractEndMonth = contractEndDate.getMonth() + 1;
+        const contractEndFirstDay = new Date(contractEndYear, contractEndMonth - 1, 1);
+
+        // 対象月が契約期間終了月以降の場合に計上
+        if (targetDate >= contractEndFirstDay) {
+          revenue += renewalMonthlyRevenue;
+        }
+      } else {
+        // 年次計算の場合: 契約期間終了後から会計年度末までの月数を計算
+        const fiscalStartMonth = getFiscalYearStartMonth();
+        const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1);
+        const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0); // 会計年度終了日（翌年の期首月の前日）
+
+        // 契約期間終了後から会計年度末までの有効期間を計算
+        if (contractEndDate < fiscalEndDate) {
+          // 有効開始日: 契約終了日 vs 会計年度開始日の遅い方
+          const effectiveStartDate = contractEndDate > fiscalStartDate ? contractEndDate : fiscalStartDate;
+
+          // 有効月数を計算
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12
+                            + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+
+          if (monthsDiff > 0) {
+            revenue += renewalMonthlyRevenue * monthsDiff;
+          }
+        }
+      }
     }
   });
 
@@ -263,10 +331,10 @@ export async function calculateBalanceSheet(
 
   // 1. 現金の計算
   // 累積入金額 - 累積支出額 + 初期残高
-  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:P');
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:AH');
 
   let totalIncome = 0;
-  contractData.slice(1).forEach(row => {
+  contractData.slice(2).forEach(row => {
     const paymentActualDate = row[12]; // M列（入金実績日）
     const amount = parseAmount(row[5]); // F列（契約金額）
 
@@ -316,7 +384,7 @@ export async function calculateBalanceSheet(
   // 2. 売掛金の計算
   // 契約日が基準日以前で、入金実績日が空 OR 入金ステータスが「未入金」
   let accountsReceivable = 0;
-  contractData.slice(1).forEach(row => {
+  contractData.slice(2).forEach(row => {
     const contractDate = row[4];        // E列（契約日）
     const amount = parseAmount(row[5]); // F列（契約金額）
     const paymentActualDate = row[12];  // M列（入金実績日）
@@ -431,10 +499,10 @@ export async function calculateCashFlowStatement(
 
   // 1. 営業活動によるキャッシュフロー
   // 顧客からの入金（M列: 入金実績日が対象期間内）
-  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:P');
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:AH');
 
   let cashFromCustomers = 0;
-  contractData.slice(1).forEach(row => {
+  contractData.slice(2).forEach(row => {
     const paymentActualDate = row[12]; // M列（入金実績日）
     const amount = parseAmount(row[5]); // F列（契約金額）
 
@@ -647,11 +715,11 @@ export async function calculatePaymentSchedule(
   });
 
   // 3. 契約・入金管理シートから入金予定を取得
-  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:P');
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:AH');
 
-  contractData.slice(1).forEach(row => {
-    const companyName = row[1];                 // B列: 企業名
-    const productName = row[2];                 // C列: 商品名
+  contractData.slice(2).forEach(row => {
+    const companyName = row[2];                 // C列: 企業名
+    const productName = row[3];                 // D列: 契約サービス
     const amount = parseAmount(row[5]);         // F列: 契約金額
     const paymentScheduledDate = row[11];       // L列: 入金予定日
 
@@ -806,4 +874,205 @@ export async function calculateDailyCashFlow(
   }
 
   return dailyData;
+}
+
+/**
+ * 未来の現金推移を予測
+ * @param baseYear - 基準年
+ * @param baseMonth - 基準月
+ * @param months - 予測期間（月数）
+ * @returns 未来予測レスポンス
+ */
+export async function predictFutureCashFlow(
+  baseYear: number,
+  baseMonth: number,
+  months: number = 6
+): Promise<FuturePredictionResponse> {
+  const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+
+  // 1. 現在の現金残高を取得
+  const currentBS = await calculateBalanceSheet(baseYear, baseMonth);
+  const currentCash = currentBS.assets.currentAssets.cash;
+
+  // 2. 過去3ヶ月の実績を取得
+  const historicalData = await getHistoricalAverages(baseYear, baseMonth);
+
+  // 3. 現在有効な固定費を取得
+  const fixedCostData = await getSheetData(spreadsheetId, '固定費マスタ!A:H');
+  let monthlyFixedCosts = 0;
+  const targetMonth = `${baseYear}/${String(baseMonth).padStart(2, '0')}`;
+
+  fixedCostData.slice(1).forEach(row => {
+    const isActive = row[0] === true || row[0] === 'TRUE';
+    const amount = parseAmount(row[2]);
+    const startMonth = row[6];
+
+    if (isActive && startMonth && startMonth <= targetMonth) {
+      monthlyFixedCosts += amount;
+    }
+  });
+
+  // 4. 未来N月分の予測を生成
+  const predictions: MonthlyPrediction[] = [];
+  let cumulativeCash = currentCash;
+
+  for (let i = 1; i <= months; i++) {
+    // 次の月を計算
+    let futureMonth = baseMonth + i;
+    let futureYear = baseYear;
+
+    while (futureMonth > 12) {
+      futureMonth -= 12;
+      futureYear += 1;
+    }
+
+    const period = `${futureYear}/${String(futureMonth).padStart(2, '0')}`;
+
+    // 予測値（過去3ヶ月の平均を使用）
+    const predictedRevenue = historicalData.revenue;
+    const predictedExpenses = historicalData.expenses;
+    const predictedSalary = historicalData.salary;
+    const predictedFixedCosts = monthlyFixedCosts;
+
+    // 純増減 = 売上 - 経費 - 給与 - 固定費
+    const netCashFlow = predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts;
+    cumulativeCash += netCashFlow;
+
+    predictions.push({
+      year: futureYear,
+      month: futureMonth,
+      period,
+      predictedRevenue,
+      predictedExpenses,
+      predictedSalary,
+      predictedFixedCosts,
+      netCashFlow,
+      cumulativeCashFlow: cumulativeCash,
+      isPredicted: true
+    });
+  }
+
+  // 5. 現金枯渇警告を計算
+  const cashDepletionWarning = calculateCashDepletionWarning(predictions);
+
+  return {
+    baseYear,
+    baseMonth,
+    currentCash,
+    historicalAverage: {
+      revenue: historicalData.revenue,
+      expenses: historicalData.expenses,
+      salary: historicalData.salary,
+      fixedCosts: monthlyFixedCosts,
+      netCashFlow: historicalData.revenue - historicalData.expenses - historicalData.salary - monthlyFixedCosts
+    },
+    predictions,
+    cashDepletionWarning,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * 過去3ヶ月の実績平均を取得（入金実績ベース）
+ */
+async function getHistoricalAverages(
+  baseYear: number,
+  baseMonth: number
+): Promise<{ revenue: number; expenses: number; salary: number }> {
+  const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+
+  // 過去3ヶ月の年月を計算
+  const months: Array<{ year: number; month: number }> = [];
+  for (let i = 1; i <= 3; i++) {
+    let targetMonth = baseMonth - i;
+    let targetYear = baseYear;
+
+    while (targetMonth <= 0) {
+      targetMonth += 12;
+      targetYear -= 1;
+    }
+
+    months.push({ year: targetYear, month: targetMonth });
+  }
+
+  let totalRevenue = 0;
+  let totalExpenses = 0;
+  let totalSalary = 0;
+
+  // 契約データを取得（入金実績ベース）
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:AH');
+
+  // 過去3ヶ月の入金実績を合計
+  contractData.slice(2).forEach(row => {
+    const paymentActualDate = row[12]; // M列（入金実績日）
+    const amount = parseAmount(row[5]); // F列（契約金額）
+
+    if (paymentActualDate) {
+      for (const { year, month } of months) {
+        if (isDateInMonth(paymentActualDate, year, month)) {
+          totalRevenue += amount;
+          break;
+        }
+      }
+    }
+  });
+
+  // 過去3ヶ月の経費と給与を合計（P/Lから）
+  for (const { year, month } of months) {
+    const pl = await calculateProfitAndLoss(year, month);
+    totalExpenses += pl.costOfSales;
+    totalSalary += pl.salaryExpenses;
+  }
+
+  // 平均を計算
+  return {
+    revenue: totalRevenue / 3,
+    expenses: totalExpenses / 3,
+    salary: totalSalary / 3
+  };
+}
+
+/**
+ * 現金枯渇警告を計算
+ */
+function calculateCashDepletionWarning(
+  predictions: MonthlyPrediction[]
+): CashDepletionWarning {
+  // 現金残高がマイナスになる最初の月を検出
+  const depletionPrediction = predictions.find(p => p.cumulativeCashFlow < 0);
+
+  if (!depletionPrediction) {
+    return {
+      willDeplete: false,
+      severity: 'safe',
+      message: '予測期間内に現金が枯渇する見込みはありません。'
+    };
+  }
+
+  // 枯渇までの月数を計算
+  const depletionIndex = predictions.indexOf(depletionPrediction);
+  const monthsUntilDepletion = depletionIndex + 1; // +1 because index is 0-based
+
+  // 警告レベルを判定
+  let severity: 'safe' | 'caution' | 'warning' | 'danger';
+  let message: string;
+
+  if (monthsUntilDepletion <= 3) {
+    severity = 'danger';
+    message = `⚠️ 危険: ${monthsUntilDepletion}ヶ月後（${depletionPrediction.period}）に現金が枯渇する見込みです。早急な対策が必要です。`;
+  } else if (monthsUntilDepletion <= 6) {
+    severity = 'warning';
+    message = `⚠️ 警告: ${monthsUntilDepletion}ヶ月後（${depletionPrediction.period}）に現金が枯渇する見込みです。対策を検討してください。`;
+  } else {
+    severity = 'caution';
+    message = `注意: ${monthsUntilDepletion}ヶ月後（${depletionPrediction.period}）に現金が枯渇する可能性があります。`;
+  }
+
+  return {
+    willDeplete: true,
+    depletionMonth: depletionPrediction.period,
+    monthsUntilDepletion,
+    severity,
+    message
+  };
 }

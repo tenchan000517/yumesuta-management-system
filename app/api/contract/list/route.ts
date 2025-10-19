@@ -11,7 +11,7 @@ export async function GET() {
     // Google Sheetsから全データ取得
     const rawData = await getSheetData(
       spreadsheetId,
-      `${sheetName}!A:AD`
+      `${sheetName}!A:AH`
     );
 
     // データパース
@@ -69,7 +69,11 @@ function parseContractData(rows: any[][]): ContractData[] {
       paymentStatus: row[13] || '未入金',
       delayDays: parseInt(row[14]) || undefined,
       publicationIssue: row[15] || '',
-      notes: row[16] || undefined
+      notes: row[16] || undefined,
+      contractStartDate: row[17] || undefined,
+      contractPeriodMonths: parseInt(row[18]) || undefined,
+      autoRenewal: row[19] || undefined,
+      autoRenewalAmount: row[20] || undefined
     });
   }
 

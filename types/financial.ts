@@ -260,3 +260,63 @@ export interface CFDetailsResponse {
   weeklySummary: WeeklyItem[];         // 週次サマリー
   dailyCashFlow: DailyCashFlowItem[];  // 日次推移
 }
+
+/**
+ * 月次予測データ
+ */
+export interface MonthlyPrediction {
+  year: number;
+  month: number;
+  period: string;                    // 例: "2025/11"
+
+  // 予測値
+  predictedRevenue: number;          // 予測売上
+  predictedExpenses: number;         // 予測経費
+  predictedSalary: number;           // 予測給与
+  predictedFixedCosts: number;       // 予測固定費
+
+  // 計算値
+  netCashFlow: number;               // 純増減（予測売上 - 予測支出）
+  cumulativeCashFlow: number;        // 累積現金残高
+
+  // メタ情報
+  isPredicted: true;                 // 予測データであることを示すフラグ
+}
+
+/**
+ * 現金枯渇警告
+ */
+export interface CashDepletionWarning {
+  willDeplete: boolean;              // 枯渇するかどうか
+  depletionMonth?: string;           // 枯渇月（例: "2025/12"）
+  monthsUntilDepletion?: number;     // 枯渇までの月数
+  severity: 'safe' | 'caution' | 'warning' | 'danger';  // 警告レベル
+  message: string;                   // 警告メッセージ
+}
+
+/**
+ * 未来予測レスポンス
+ */
+export interface FuturePredictionResponse {
+  // 基準情報
+  baseYear: number;
+  baseMonth: number;
+  currentCash: number;               // 現在の現金残高
+
+  // 過去3ヶ月の実績平均（参考値）
+  historicalAverage: {
+    revenue: number;
+    expenses: number;
+    salary: number;
+    fixedCosts: number;
+    netCashFlow: number;
+  };
+
+  // 予測データ
+  predictions: MonthlyPrediction[];
+
+  // 現金枯渇警告
+  cashDepletionWarning: CashDepletionWarning;
+
+  generatedAt: string;
+}
