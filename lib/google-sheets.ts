@@ -5,7 +5,43 @@ import { google } from 'googleapis';
  * サービスアカウント認証を使用してGoogle Sheetsからデータを取得
  */
 
+// ========================================
+// リクエスト数カウンター（デバッグ用）
+// ========================================
+interface RequestLog {
+  timestamp: string;
+  type: 'getSheetData' | 'getBatchSheetData' | 'getSpreadsheetMetadata';
+  spreadsheetId: string;
+  range?: string;
+  ranges?: string[];
+}
+
+let requestCount = 0;
+let requestLogs: RequestLog[] = [];
+
+export function getRequestCount(): number {
+  return requestCount;
+}
+
+export function getRequestLogs(): RequestLog[] {
+  return requestLogs;
+}
+
+export function resetRequestCount(): void {
+  requestCount = 0;
+  requestLogs = [];
+  console.log('🔄 Request counter reset');
+}
+
+function logRequest(log: RequestLog): void {
+  requestCount++;
+  requestLogs.push(log);
+  console.log(`[Google Sheets API] Request #${requestCount}: ${log.type} - ${log.range || log.ranges?.join(', ') || 'metadata'}`);
+}
+
+// ========================================
 // サービスアカウント認証情報の型定義
+// ========================================
 interface ServiceAccountCredentials {
   type: string;
   project_id: string;
@@ -61,6 +97,14 @@ export async function getSheetData(
   range: string
 ): Promise<any[][]> {
   try {
+    // リクエストをログに記録
+    logRequest({
+      timestamp: new Date().toISOString(),
+      type: 'getSheetData',
+      spreadsheetId,
+      range,
+    });
+
     const sheets = getGoogleSheetsClient();
 
     const response = await sheets.spreadsheets.values.get({
@@ -86,6 +130,14 @@ export async function getBatchSheetData(
   ranges: string[]
 ): Promise<any[][][]> {
   try {
+    // リクエストをログに記録
+    logRequest({
+      timestamp: new Date().toISOString(),
+      type: 'getBatchSheetData',
+      spreadsheetId,
+      ranges,
+    });
+
     const sheets = getGoogleSheetsClient();
 
     const response = await sheets.spreadsheets.values.batchGet({
@@ -107,6 +159,13 @@ export async function getBatchSheetData(
  */
 export async function getSpreadsheetMetadata(spreadsheetId: string) {
   try {
+    // リクエストをログに記録
+    logRequest({
+      timestamp: new Date().toISOString(),
+      type: 'getSpreadsheetMetadata',
+      spreadsheetId,
+    });
+
     const sheets = getGoogleSheetsClient();
 
     const response = await sheets.spreadsheets.get({
