@@ -1,7 +1,8 @@
-# P/L比率表示 & シミュレーション予測機能 実装計画書
+# P/L比率表示 & シミュレーション予測機能 実装計画書（完全版）
 
 **作成日**: 2025-10-19
-**対象バージョン**: Phase 1（基本機能実装）
+**最終更新**: 2025-10-19
+**対象バージョン**: Phase 1（基本機能実装） + Phase 2（履歴保存・精度向上）
 **優先度**: 🔴 **高**
 
 ---
@@ -10,8 +11,14 @@
 
 1. [背景・目的](#背景目的)
 2. [要件定義](#要件定義)
+   - 要件1: P/Lに売上高比率（％）を追加
+   - 要件2: シミュレーションベースの予測キャッシュフロー
+   - 要件3: 税金支払設定（経営マストイベント）
+   - 要件4: PL履歴保存機能（Phase 2）
 3. [データ構造設計](#データ構造設計)
 4. [実装計画](#実装計画)
+   - Phase 1: 基本機能実装
+   - Phase 2: 履歴保存・精度向上
 5. [UI設計](#ui設計)
 6. [実装ファイル一覧](#実装ファイル一覧)
 7. [テスト項目](#テスト項目)
@@ -25,23 +32,35 @@
 1. **P/Lに比率表示がない**
    - 各経費項目が売上高の何％を占めているか分からない
    - 経費コントロールの目安がない
+   - 過去の実績を比較できない
 
 2. **予測キャッシュフローの精度が低い**
    - 現在は「過去3ヶ月の平均」を使用
    - 売上が増減しても、経費が連動しない
    - 将来のビジネスプランをシミュレーションできない
 
+3. **税金支払のインパクトが見えない**
+   - 法人税、消費税などの支払月にキャッシュが大きく減る
+   - 税金支払を考慮したキャッシュフロー予測ができない
+   - 資金繰りの見通しが甘くなる
+
 ### 目指すゴール
 
 1. **P/Lに売上高比率（％）を表示**
    - 交通費率、人件費率、接待交際費率、原価率などを可視化
    - 経営判断の指標として活用
+   - 履歴を保存して、トレンド分析・PDCA改善
 
 2. **シミュレーションベースの予測キャッシュフロー**
    - 「実績ベース」と「シミュレーションベース」をタブ切り替え
    - シミュレーション設定シートで、各経費の目標売上比率（％）を設定
    - 予測売上に対して、設定した％を掛けて経費を計算
    - 売上増減に連動して経費も変動するため、精度が向上
+
+3. **税金支払を組み込んだ予測**
+   - 法人税、消費税などの支払月・金額を設定
+   - キャッシュフロー予測に税金を反映
+   - 資金繰りの見通しを正確化
 
 ---
 
@@ -127,15 +146,8 @@
 ```
 
 **環境変数**:
-- `.env.local` に以下を追加:
-  ```
-  SIMULATION_SPREADSHEET_ID=（スプレッドシートID）
-  ```
-  ※注: 既存のSALES_SPREADSHEET_IDと同じスプレッドシート内に「シミュレーション設定」シートを追加する場合は、新規の環境変数は不要。
-
-**推奨アプローチ**:
-- 既存の `SALES_SPREADSHEET_ID` のスプレッドシート内に「シミュレーション設定」シートを追加する
-- 新しい環境変数を追加せず、`process.env.SALES_SPREADSHEET_ID` を使用
+- 既存の `SALES_SPREADSHEET_ID` のスプレッドシート内に「シミュレーション設定」シートを追加
+- 新しい環境変数は不要
 
 ---
 
@@ -143,21 +155,22 @@
 
 **モード1: 実績ベース（現行仕様、変更なし）**
 
-- **予測売上**: 入金予定日ベース
+- **予定入金**: 入金予定日ベース
 - **予測経費**: 過去3ヶ月の実績平均（C/Fベース）
 - **予測給与**: 過去3ヶ月の実績平均（C/Fベース）
 - **予測固定費**: 固定費マスタから計算
 
 **モード2: シミュレーションベース（新規追加）**
 
-- **予測売上**: 入金予定日ベース（実績ベースと同じ）
-- **予測経費**: **予測売上 × シミュレーション設定の売上比率（％）の合計**
-  - 計算式: `(交通費率 + 接待交際費率 + 雑費率 + 印刷代率 + 配送費率) × 予測売上`
-  - 例: 予測売上が100万円、経費系の合計比率が29%の場合 → 29万円
-- **予測給与**: **予測売上 × シミュレーション設定の人件費率（％）**
-  - 計算式: `人件費率 × 予測売上`
-  - 例: 予測売上が100万円、人件費率が25%の場合 → 25万円
+- **予定入金**: 入金予定日ベース（実績ベースと同じ）
+- **予測経費**: **予定入金 × シミュレーション設定の売上比率（％）の合計**
+  - 計算式: `(交通費率 + 接待交際費率 + 雑費率 + 印刷代率 + 配送費率) × 予定入金`
+  - 例: 予定入金が100万円、経費系の合計比率が29%の場合 → 29万円
+- **予測給与**: **予定入金 × シミュレーション設定の人件費率（％）**
+  - 計算式: `人件費率 × 予定入金`
+  - 例: 予定入金が100万円、人件費率が25%の場合 → 25万円
 - **予測固定費**: 固定費マスタから計算（実績ベースと同じ）
+- **税金**: 税金支払設定から計算（後述）
 
 ---
 
@@ -179,10 +192,147 @@
 └─────────────────────────────────────────┘
 ```
 
-**実装方法**:
-- React `useState` で `predictionMode` を管理
-- `predictionMode` が `"actual"` または `"simulation"` に応じてAPIを呼び分ける
-- タブボタンは Tailwind CSS のスタイルで実装（既存の年次・月次切り替えと同じデザイン）
+---
+
+### 要件3: 税金支払設定（経営マストイベント）
+
+#### 3.1 背景
+
+**経営上の重要イベント（税金支払）**:
+- 法人税、消費税などの支払月にキャッシュが大きく減少
+- 税金を考慮しないと、キャッシュフロー予測が甘くなる
+- 資金繰りの見通しが不正確になる
+
+#### 3.2 税金支払設定シート（新規作成）
+
+**Googleスプレッドシート**: 「税金支払設定」シート（新規作成）
+
+**列構造**:
+
+| 列 | Index | 内容 | 説明 | 例 |
+|---|---|---|---|---|
+| A | 0 | 税金種別 | 税金の名前 | `法人税等` |
+| B | 1 | 支払月（1-12） | 支払う月 | `11` |
+| C | 2 | 計算方法 | `固定` / `売上比率` / `利益比率` | `利益比率` |
+| D | 3 | 比率または金額 | ％または円 | `30` |
+| E | 4 | 備考 | メモ欄 | `実効税率30%` |
+
+**初期データ例（WEB制作・広告業、9月決算法人）**:
+
+```
+税金種別       | 支払月 | 計算方法   | 比率/金額 | 備考
+------------------------------------------------------------
+法人税等       | 11    | 利益比率   | 30       | 実効税率30%（年間利益×30%）
+法人税等（中間）| 5     | 固定      | 500000   | 前年実績の半分
+消費税（確定）  | 11    | 売上比率   | 5        | 簡易課税・第五種（年間売上×5%）
+消費税（中間）  | 5     | 固定      | 300000   | 前年実績の半分
+```
+
+**計算方法の説明**:
+
+1. **固定**: 設定した金額をそのまま使用
+   - 用途: 中間納付（前年実績ベース）
+   - 例: `500,000円`
+
+2. **売上比率**: 月次予定入金 × 設定した比率（％）
+   - 用途: 消費税（売上に連動）
+   - 計算式: `予定入金 × (比率 / 100)`
+   - 例: 予定入金100万円、比率5% → 5万円
+
+3. **利益比率**: 年間予測利益 × 設定した比率（％）
+   - 用途: 法人税（利益に連動）
+   - 計算式: `(月次予定入金 - 月次予測経費 - 月次予測給与 - 月次予測固定費) × 12 × (比率 / 100)`
+   - 例: 月次利益30万円 → 年間利益360万円 → 法人税108万円（30%）
+
+#### 3.3 日本の税制（2024-2025年時点）
+
+**法人税**:
+- 支払時期: 事業年度終了の翌日から2ヶ月以内
+- 中間納付: 事業年度開始から6ヶ月後の2ヶ月以内
+- 実効税率: 約30%（法人税+地方法人税等）
+
+**消費税**:
+- 支払時期: 事業年度終了の翌日から2ヶ月以内
+- 中間納付: 前年の消費税額に応じて年1回、3回、または11回
+- 簡易課税制度（WEB制作・広告業＝第五種）:
+  - みなし仕入率: 50%
+  - 実質納付率: 売上の約5%
+
+#### 3.4 シミュレーション予測への反映
+
+**予測キャッシュフロー（シミュレーションバージョン）の計算式**:
+```
+純増減 = 予定入金 - 予測経費 - 予測給与 - 予測固定費 - 税金支払
+```
+
+**該当月のみ税金が差し引かれる例**:
+```
+2025/3月: 純増減 = 100万 - 29万 - 25万 - 20万 - 0（税金なし） = 26万
+2025/5月: 純増減 = 100万 - 29万 - 25万 - 20万 - 80万（法人税中間+消費税中間） = -54万
+2025/11月: 純増減 = 100万 - 29万 - 25万 - 20万 - 188万（法人税確定+消費税確定） = -162万
+```
+
+#### 3.5 UI表示
+
+**予測テーブルに「税金」カラムを追加**:
+
+```
+月     | 予定入金 | 予測経費 | 予測給与 | 予測固定費 | 税金    | 純増減  | 累積残高
+---------------------------------------------------------------------------------
+2025/3 | 100万   | 29万    | 25万    | 20万      | 0      | 26万    | 126万
+2025/5 | 100万   | 29万    | 25万    | 20万      | 80万   | -54万   | 72万
+2025/11| 100万   | 29万    | 25万    | 20万      | 188万  | -162万  | -90万 ⚠️
+```
+
+---
+
+### 要件4: PL履歴保存機能（Phase 2）
+
+#### 4.1 目的
+
+- P/Lの％実績値を月次で保存
+- 過去の推移を可視化（トレンド分析）
+- シミュレーション精度の向上（過去の平均利益率から税金を計算）
+
+#### 4.2 保存する項目
+
+**PL履歴保存シート（新規作成）**: 「PL比率履歴」
+
+| 列 | 内容 | 例 |
+|---|---|---|
+| A | 年月 | `2025/10` |
+| B | 売上高 | `1000000` |
+| C | 売上原価 | `200000` |
+| D | 売上原価率(%) | `20.0` |
+| E | 人件費 | `250000` |
+| F | 人件費率(%) | `25.0` |
+| G | 交通費 | `30000` |
+| H | 交通費率(%) | `3.0` |
+| I | 接待交際費 | `50000` |
+| J | 接待交際費率(%) | `5.0` |
+| K | 雑費 | `20000` |
+| L | 雑費率(%) | `2.0` |
+| M | 固定費 | `200000` |
+| N | 固定費率(%) | `20.0` |
+| O | 営業利益 | `250000` |
+| P | 営業利益率(%) | `25.0` |
+
+#### 4.3 保存タイミング
+
+**手動更新ボタン**:
+- P/L表示画面に「履歴保存」ボタンを追加
+- ボタンをクリックすると、現在表示中のP/Lデータを履歴シートに追加
+- APIエンドポイント: `POST /api/financial-statements/save-history`
+
+#### 4.4 履歴データの活用
+
+**トレンド分析**:
+- 過去3-6ヶ月の各比率を折れ線グラフで表示
+- 「人件費率が上昇傾向」などの気づきを得る
+
+**シミュレーション精度向上**:
+- 過去の平均利益率から税金を自動計算
+- 計算式: `年間予測利益 = 月次予定入金 × 過去平均利益率 × 12`
 
 ---
 
@@ -201,14 +351,39 @@ export interface SimulationSetting {
   salesRatio: number;         // B列: 売上比率（％、例: 3.0 = 3%）
   notes?: string;             // C列: 備考
 }
+```
 
+#### 税金支払設定の型
+
+```typescript
 /**
- * シミュレーション設定レスポンス
+ * 税金支払設定項目
  */
-export interface SimulationSettingsResponse {
-  success: boolean;
-  data?: SimulationSetting[];
-  error?: string;
+export interface TaxPaymentSetting {
+  taxType: string;                               // A列: 税金種別
+  paymentMonth: number;                          // B列: 支払月（1-12）
+  calculationMethod: 'fixed' | 'salesRatio' | 'profitRatio';  // C列: 計算方法
+  rateOrAmount: number;                          // D列: 比率（％）または金額（円）
+  notes?: string;                                // E列: 備考
+}
+```
+
+#### PL履歴の型
+
+```typescript
+/**
+ * PL比率履歴項目
+ */
+export interface PLHistoryRecord {
+  yearMonth: string;          // A列: 年月（YYYY/MM）
+  revenue: number;            // B列: 売上高
+  costOfSalesRatio: number;   // D列: 売上原価率(%)
+  salaryRatio: number;        // F列: 人件費率(%)
+  travelExpenseRatio: number; // H列: 交通費率(%)
+  entertainmentRatio: number; // J列: 接待交際費率(%)
+  miscExpenseRatio: number;   // L列: 雑費率(%)
+  fixedCostRatio: number;     // N列: 固定費率(%)
+  operatingProfitRatio: number; // P列: 営業利益率(%)
 }
 ```
 
@@ -238,13 +413,37 @@ export interface PLDisplayRow {
 export type PredictionMode = 'actual' | 'simulation';
 
 /**
+ * 月次予測データ（拡張版）
+ */
+export interface MonthlyPrediction {
+  year: number;
+  month: number;
+  period: string;
+
+  // 予測値
+  predictedRevenue: number;
+  predictedExpenses: number;
+  predictedSalary: number;
+  predictedFixedCosts: number;
+  predictedTax: number;           // ← 追加: 予測税金
+
+  // 計算値
+  netCashFlow: number;
+  cumulativeCashFlow: number;
+
+  // メタ情報
+  isPredicted: true;
+}
+
+/**
  * 未来予測レスポンス（拡張版）
  */
 export interface FuturePredictionResponse {
   baseYear: number;
   baseMonth: number;
   mode: PredictionMode;  // ← 追加: 予測モード
-  currentMonth: {
+  currentCash: number;   // 現在の現金残高
+  historicalAverage: {
     revenue: number;
     expenses: number;
     salary: number;
@@ -261,7 +460,7 @@ export interface FuturePredictionResponse {
 
 ### 2. Googleシート構造
 
-#### 新規作成: 「シミュレーション設定」シート
+#### 新規作成1: 「シミュレーション設定」シート
 
 **シート名**: `シミュレーション設定`
 
@@ -284,62 +483,85 @@ C列: 備考
 
 ---
 
-## 🛠️ 実装計画
+#### 新規作成2: 「税金支払設定」シート
 
-### Phase 1: データ準備（手動作業）
+**シート名**: `税金支払設定`
 
-#### タスク1-1: シミュレーション設定シートの作成
+**ヘッダー行（1行目）**:
+```
+A列: 税金種別
+B列: 支払月（1-12）
+C列: 計算方法
+D列: 比率または金額
+E列: 備考
+```
 
-**手順**:
-1. Googleスプレッドシート（既存の売上管理スプレッドシート）を開く
-2. 新しいシート「シミュレーション設定」を追加
-3. ヘッダー行を作成:
-   ```
-   A1: 項目名
-   B1: 売上比率(%)
-   C1: 備考
-   ```
-4. 初期データを入力:
-   ```
-   A2: 交通費         B2: 3.0   C2: 営業活動に伴う交通費
-   A3: 接待交際費     B3: 5.0   C3: クライアント接待費
-   A4: 雑費           B4: 2.0   C4: その他諸経費
-   A5: 印刷代         B5: 15.0  C5: 雑誌印刷コスト
-   A6: 配送費         B6: 4.0   C6: 雑誌配送コスト
-   A7: 人件費         B7: 25.0  C7: 給与・賞与
-   ```
-
-**確認方法**:
-- シート名が「シミュレーション設定」であることを確認
-- B列の値が数値（％表示ではなく、`3.0` のような小数）であることを確認
+**データ例（2行目以降、WEB制作・広告業、9月決算法人）**:
+```
+法人税等       | 11 | 利益比率 | 30     | 実効税率30%（年間利益×30%）
+法人税等（中間）| 5  | 固定    | 500000 | 前年実績の半分
+消費税（確定）  | 11 | 売上比率 | 5      | 簡易課税・第五種（年間売上×5%）
+消費税（中間）  | 5  | 固定    | 300000 | 前年実績の半分
+```
 
 ---
 
-### Phase 2: バックエンド実装
+#### 新規作成3: 「PL比率履歴」シート（Phase 2）
 
-#### タスク2-1: シミュレーション設定API作成
+**シート名**: `PL比率履歴`
+
+**ヘッダー行（1行目）**:
+```
+A列: 年月
+B列: 売上高
+C列: 売上原価
+D列: 売上原価率(%)
+E列: 人件費
+F列: 人件費率(%)
+G列: 交通費
+H列: 交通費率(%)
+I列: 接待交際費
+J列: 接待交際費率(%)
+K列: 雑費
+L列: 雑費率(%)
+M列: 固定費
+N列: 固定費率(%)
+O列: 営業利益
+P列: 営業利益率(%)
+```
+
+---
+
+## 🛠️ 実装計画
+
+### Phase 1: 基本機能実装（優先）
+
+#### タスク1-1: データ準備（手動作業）
+
+**シミュレーション設定シートの作成**:
+1. Googleスプレッドシート（既存の売上管理スプレッドシート）を開く
+2. 新しいシート「シミュレーション設定」を追加
+3. ヘッダー行と初期データを入力（前述の通り）
+
+**税金支払設定シートの作成**:
+1. 同じスプレッドシート内に「税金支払設定」シートを追加
+2. ヘッダー行と初期データを入力（前述の通り）
+
+---
+
+#### タスク1-2: バックエンド実装
+
+**1. シミュレーション設定API作成**
 
 **ファイル**: `app/api/simulation-settings/route.ts`（新規作成）
 
-**仕様**:
-- **エンドポイント**: `GET /api/simulation-settings`
-- **レスポンス**:
-  ```typescript
-  {
-    success: true,
-    data: [
-      { itemName: "交通費", salesRatio: 3.0, notes: "営業活動に伴う交通費" },
-      { itemName: "接待交際費", salesRatio: 5.0, notes: "クライアント接待費" },
-      // ...
-    ]
-  }
-  ```
+**エンドポイント**: `GET /api/simulation-settings`
 
 **実装内容**:
 ```typescript
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
-import type { SimulationSetting, SimulationSettingsResponse } from '@/types/financial';
+import type { SimulationSetting } from '@/types/financial';
 
 export async function GET() {
   try {
@@ -347,8 +569,6 @@ export async function GET() {
     const rawData = await getSheetData(spreadsheetId, 'シミュレーション設定!A:C');
 
     const settings: SimulationSetting[] = [];
-
-    // 1行目（ヘッダー）をスキップ
     for (let i = 1; i < rawData.length; i++) {
       const row = rawData[i];
       if (!row || row.length === 0 || !row[0]) continue;
@@ -360,19 +580,10 @@ export async function GET() {
       });
     }
 
-    const response: SimulationSettingsResponse = {
-      success: true,
-      data: settings
-    };
-
-    return NextResponse.json(response);
+    return NextResponse.json({ success: true, data: settings });
   } catch (error) {
-    console.error('シミュレーション設定取得エラー:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : '不明なエラー'
-      } as SimulationSettingsResponse,
+      { success: false, error: error instanceof Error ? error.message : '不明なエラー' },
       { status: 500 }
     );
   }
@@ -381,460 +592,366 @@ export async function GET() {
 
 ---
 
-#### タスク2-2: 未来予測API拡張
+**2. 税金支払設定API作成**
 
-**ファイル**: `app/api/financial-statements/future-prediction/route.ts`（既存ファイルを修正）
+**ファイル**: `app/api/tax-payment-settings/route.ts`（新規作成）
 
-**変更内容**:
+**エンドポイント**: `GET /api/tax-payment-settings`
 
-1. **クエリパラメータ追加**:
-   - `mode`: `actual` または `simulation`（デフォルト: `actual`）
+**実装内容**:
+```typescript
+import { NextResponse } from 'next/server';
+import { getSheetData } from '@/lib/google-sheets';
+import type { TaxPaymentSetting } from '@/types/financial';
 
-2. **APIエンドポイント例**:
-   ```
-   GET /api/financial-statements/future-prediction?year=2025&month=10&months=6&mode=actual
-   GET /api/financial-statements/future-prediction?year=2025&month=10&months=6&mode=simulation
-   ```
+export async function GET() {
+  try {
+    const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+    const rawData = await getSheetData(spreadsheetId, '税金支払設定!A:E');
 
-3. **シミュレーションモードの計算ロジック**:
+    const settings: TaxPaymentSetting[] = [];
+    for (let i = 1; i < rawData.length; i++) {
+      const row = rawData[i];
+      if (!row || row.length === 0 || !row[0]) continue;
+
+      const calculationMethod = row[2];
+      let method: 'fixed' | 'salesRatio' | 'profitRatio' = 'fixed';
+      if (calculationMethod === '売上比率') method = 'salesRatio';
+      else if (calculationMethod === '利益比率') method = 'profitRatio';
+
+      settings.push({
+        taxType: row[0] || '',
+        paymentMonth: parseInt(row[1]) || 1,
+        calculationMethod: method,
+        rateOrAmount: parseFloat(row[3]) || 0,
+        notes: row[4] || undefined
+      });
+    }
+
+    return NextResponse.json({ success: true, data: settings });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : '不明なエラー' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+---
+
+**3. 未来予測API拡張**
+
+**ファイル**: `lib/financial-calculations.ts`（既存ファイルを修正）
+
+**変更内容**: `predictFutureCashFlow` 関数を拡張
 
 ```typescript
-// lib/financial-calculations.ts の predictFutureCashFlow 関数を拡張
-
 export async function predictFutureCashFlow(
   baseYear: number,
   baseMonth: number,
   months: number = 6,
-  mode: PredictionMode = 'actual'  // ← 新規パラメータ
+  mode: PredictionMode = 'actual'
 ): Promise<FuturePredictionResponse> {
-  // ... 既存の処理 ...
+  const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
 
-  // シミュレーション設定を取得（modeが'simulation'の場合のみ）
-  let simulationSettings: SimulationSetting[] = [];
-  if (mode === 'simulation') {
-    const settingsData = await getSheetData(spreadsheetId, 'シミュレーション設定!A:C');
-    simulationSettings = parseSimulationSettings(settingsData);
-  }
+  // データ取得
+  const [currentBS, contractData, expenditureData, fixedCostData, simulationSettings, taxSettings] = await Promise.all([
+    calculateBalanceSheet(baseYear, baseMonth),
+    getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
+    getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
+    getSheetData(spreadsheetId, '固定費マスタ!A:H'),
+    mode === 'simulation' ? getSheetData(spreadsheetId, 'シミュレーション設定!A:C') : Promise.resolve([]),
+    mode === 'simulation' ? getSheetData(spreadsheetId, '税金支払設定!A:E') : Promise.resolve([])
+  ]);
 
-  // 未来N月分の予測を生成
+  const currentCash = currentBS.assets.currentAssets.cash;
+
+  // シミュレーション設定をパース
+  const simSettings = mode === 'simulation' ? parseSimulationSettings(simulationSettings) : [];
+  const taxPayments = mode === 'simulation' ? parseTaxPaymentSettings(taxSettings) : [];
+
+  // 予測ループ
+  const predictions: MonthlyPrediction[] = [];
+  let cumulativeCash = currentCash;
+
   for (let i = 1; i <= months; i++) {
-    // ... 月の計算 ...
+    const futureYear = baseMonth + i > 12 ? baseYear + 1 : baseYear;
+    const futureMonth = (baseMonth + i - 1) % 12 + 1;
 
+    let predictedRevenue = calculatePredictedRevenueForMonth(contractData, futureYear, futureMonth);
     let predictedExpenses = 0;
     let predictedSalary = 0;
+    let predictedTax = 0;
 
     if (mode === 'actual') {
-      // 実績ベース（既存の処理）
+      // 実績ベース
       predictedExpenses = calculatePredictedExpensesForMonth(expenditureData, futureYear, futureMonth);
       predictedSalary = calculatePredictedSalaryForMonth(expenditureData, futureYear, futureMonth);
     } else {
       // シミュレーションベース
-      const predictedRevenue = calculatePredictedRevenueForMonth(contractData, futureYear, futureMonth);
-
-      // 経費系の合計比率を計算
-      const expenseRatios = simulationSettings
+      const expenseRatios = simSettings
         .filter(s => ['交通費', '接待交際費', '雑費', '印刷代', '配送費'].includes(s.itemName))
         .reduce((sum, s) => sum + s.salesRatio, 0);
+      const salaryRatio = simSettings.find(s => s.itemName === '人件費')?.salesRatio || 0;
 
-      // 人件費率を取得
-      const salaryRatio = simulationSettings.find(s => s.itemName === '人件費')?.salesRatio || 0;
-
-      // 予測経費・給与を計算
       predictedExpenses = Math.round(predictedRevenue * (expenseRatios / 100));
       predictedSalary = Math.round(predictedRevenue * (salaryRatio / 100));
+
+      // 税金計算
+      predictedTax = calculateTaxForMonth(
+        futureMonth,
+        predictedRevenue,
+        predictedExpenses,
+        predictedSalary,
+        taxPayments
+      );
     }
 
-    // 固定費は両モード共通
     const predictedFixedCosts = calculatePredictedFixedCostsForMonth(fixedCostData, futureYear, futureMonth);
+    const netCashFlow = Math.round(predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts - predictedTax);
+    cumulativeCash = Math.round(cumulativeCash + netCashFlow);
 
-    // ... 残りの処理 ...
+    predictions.push({
+      year: futureYear,
+      month: futureMonth,
+      period: `${futureYear}/${String(futureMonth).padStart(2, '0')}`,
+      predictedRevenue,
+      predictedExpenses,
+      predictedSalary,
+      predictedFixedCosts,
+      predictedTax,
+      netCashFlow,
+      cumulativeCashFlow: cumulativeCash,
+      isPredicted: true
+    });
   }
 
+  // 履歴平均計算（実績ベース用）
+  const historicalAverage = mode === 'actual'
+    ? await getHistoricalAverages(baseYear, baseMonth)
+    : { revenue: 0, expenses: 0, salary: 0, fixedCosts: 0, netCashFlow: 0 };
+
   return {
-    // ...
-    mode,  // ← レスポンスにモードを含める
-    // ...
+    baseYear,
+    baseMonth,
+    mode,
+    currentCash,
+    historicalAverage,
+    predictions,
+    cashDepletionWarning: calculateCashDepletionWarning(predictions),
+    updatedAt: new Date().toISOString()
   };
 }
 
 /**
- * シミュレーション設定データをパース
+ * 税金計算（該当月のみ）
  */
-function parseSimulationSettings(rows: any[][]): SimulationSetting[] {
-  const settings: SimulationSetting[] = [];
+function calculateTaxForMonth(
+  month: number,
+  revenue: number,
+  expenses: number,
+  salary: number,
+  fixedCosts: number,
+  taxSettings: TaxPaymentSetting[]
+): number {
+  let totalTax = 0;
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.length === 0 || !row[0]) continue;
+  // 該当月の税金設定を抽出
+  const monthlyTaxes = taxSettings.filter(t => t.paymentMonth === month);
 
-    settings.push({
-      itemName: row[0] || '',
-      salesRatio: parseFloat(row[1]) || 0,
-      notes: row[2] || undefined
-    });
-  }
-
-  return settings;
-}
-```
-
-**APIルート側の変更**:
-
-```typescript
-// app/api/financial-statements/future-prediction/route.ts
-
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || '');
-    const month = parseInt(searchParams.get('month') || '');
-    const months = parseInt(searchParams.get('months') || '6');
-    const mode = (searchParams.get('mode') || 'actual') as PredictionMode;  // ← 追加
-
-    // バリデーション
-    if (!mode || !['actual', 'simulation'].includes(mode)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid mode parameter' },
-        { status: 400 }
-      );
+  for (const tax of monthlyTaxes) {
+    if (tax.calculationMethod === 'fixed') {
+      totalTax += tax.rateOrAmount;
+    } else if (tax.calculationMethod === 'salesRatio') {
+      totalTax += revenue * (tax.rateOrAmount / 100);
+    } else if (tax.calculationMethod === 'profitRatio') {
+      const monthlyProfit = revenue - expenses - salary - fixedCosts;
+      const annualProfit = monthlyProfit * 12;
+      totalTax += annualProfit * (tax.rateOrAmount / 100);
     }
-
-    const result = await predictFutureCashFlow(year, month, months, mode);
-
-    return NextResponse.json({
-      success: true,
-      data: result
-    });
-  } catch (error) {
-    // ... エラーハンドリング ...
   }
+
+  return Math.round(totalTax);
 }
 ```
 
 ---
 
-#### タスク2-3: P/L計算ロジック拡張
+#### タスク1-3: フロントエンド実装
 
-**ファイル**: `lib/financial-calculations.ts`（既存ファイルを修正）
-
-**変更内容**: `calculateProfitAndLoss` 関数のレスポンスに売上高比率を追加
-
-**修正方針**:
-- 現在のP/Lは `ProfitAndLoss` 型でネストされた構造
-- 表示時に売上高比率を計算して追加する方が柔軟
-- **→ バックエンドでは変更不要、フロントエンドで計算**
-
----
-
-### Phase 3: フロントエンド実装
-
-#### タスク3-1: P/Lコンポーネントに売上高比率を追加
+**1. P/Lコンポーネントに売上高比率を追加**
 
 **ファイル**: `components/financial-statements/PLDisplay.tsx`（既存ファイルを修正）
 
-**変更内容**:
-
-1. **表示データの拡張**:
-   - 各行データに `salesRatio` プロパティを追加
-   - 売上高を基準に比率を計算
-
-2. **UI変更**:
-   - テーブルのカラムを追加: `項目 | 金額 | 売上比率`
-
-**実装例**:
+**変更内容**: テーブルに「売上比率」カラムを追加
 
 ```typescript
 export function PLDisplay({ data, loading = false }: PLDisplayProps) {
   if (!data) return <div>データがありません</div>;
 
-  const revenue = data.revenue;  // 売上高
+  const revenue = data.revenue;
 
-  // 売上高比率を計算する関数
   const calcRatio = (value: number): number => {
     if (revenue === 0) return 0;
     return (value / revenue) * 100;
   };
 
-  // 表示用データ（既存の構造に salesRatio を追加）
   const rows = [
     { type: 'header', label: '売上高', value: revenue, salesRatio: 100.0 },
-    { type: 'separator' },
-    { type: 'section', label: '売上原価' },
-    { type: 'item', label: '　印刷代', value: data.costOfSales, salesRatio: calcRatio(data.costOfSales) },
-    // ... 他の項目も同様に salesRatio を追加 ...
-    { type: 'subtotal', label: '売上総利益', value: data.grossProfit, salesRatio: calcRatio(data.grossProfit) },
-    // ...
+    // ... 他の項目に salesRatio を追加 ...
   ];
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <h2 className="text-xl font-bold mb-4">損益計算書（P/L）</h2>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b">
-            <th className="text-left py-2 px-4">項目</th>
-            <th className="text-right py-2 px-4">金額</th>
-            <th className="text-right py-2 px-4">売上比率</th>
+    <table className="w-full">
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>金額</th>
+          <th>売上比率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, index) => (
+          <tr key={index}>
+            <td>{row.label}</td>
+            <td>{row.value?.toLocaleString()}円</td>
+            <td>{row.salesRatio?.toFixed(1)}%</td>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => {
-            if (row.type === 'separator') {
-              return <tr key={index}><td colSpan={3} className="border-t-2 border-gray-300"></td></tr>;
-            }
-
-            return (
-              <tr key={index}>
-                <td className="py-3 px-4">{row.label}</td>
-                <td className="py-3 px-4 text-right">
-                  {row.value !== undefined ? `${row.value.toLocaleString()}円` : ''}
-                </td>
-                <td className="py-3 px-4 text-right text-gray-600">
-                  {row.salesRatio !== undefined ? `${row.salesRatio.toFixed(1)}%` : ''}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
 ```
 
 ---
 
-#### タスク3-2: 予測キャッシュフローにタブ切り替えを追加
+**2. 予測キャッシュフローにタブ切り替えを追加**
 
 **ファイル**: `app/dashboard/financial-statements/page.tsx`（既存ファイルを修正）
 
 **変更内容**:
+- `predictionMode` state 追加
+- タブボタンUI追加
+- 予測テーブルに「税金」カラム追加
 
-1. **State追加**:
-   ```typescript
-   const [predictionMode, setPredictionMode] = useState<PredictionMode>('actual');
-   ```
+---
 
-2. **API呼び出し変更**:
-   ```typescript
-   const fetchFuturePrediction = async () => {
-     setPredictionLoading(true);
-     const response = await fetch(
-       `/api/financial-statements/future-prediction?year=${selectedYear}&month=${selectedMonth}&months=${predictionMonths}&mode=${predictionMode}`
-     );
-     // ...
-   };
-   ```
+**3. 予測テーブルコンポーネントの拡張**
 
-3. **useEffect更新**:
-   ```typescript
-   useEffect(() => {
-     if (!isAnnual && selectedMonth !== null) {
-       fetchFuturePrediction();
-     }
-   }, [selectedYear, selectedMonth, isAnnual, predictionMonths, predictionMode]);  // predictionMode を依存配列に追加
-   ```
+**ファイル**: `components/financial-statements/FutureCashFlowPrediction.tsx`（既存ファイルを修正）
 
-4. **UI: タブボタン追加**:
-   ```typescript
-   {/* 予定キャッシュフロー（月次表示時のみ） */}
-   {!isAnnual && selectedMonth !== null && (
-     <div className="bg-white border border-gray-200 rounded-lg p-6">
-       <div className="flex items-center justify-between mb-4">
-         <div className="flex items-center gap-3">
-           <h2 className="text-xl font-bold text-gray-900">予定キャッシュフロー</h2>
-         </div>
+**変更内容**: テーブルに「税金」カラムを追加
 
-         {/* 予測モード切り替え */}
-         <div className="flex items-center gap-2">
-           <button
-             onClick={() => setPredictionMode('actual')}
-             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-               predictionMode === 'actual'
-                 ? 'bg-purple-600 text-white'
-                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-             }`}
-           >
-             実績ベース
-           </button>
-           <button
-             onClick={() => setPredictionMode('simulation')}
-             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-               predictionMode === 'simulation'
-                 ? 'bg-purple-600 text-white'
-                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-             }`}
-           >
-             シミュレーション
-           </button>
-         </div>
+```typescript
+<th>税金</th>
+// ...
+<td>{formatCurrency(prediction.predictedTax)}</td>
+```
 
-         {/* 予測期間選択 */}
-         <div className="flex items-center gap-2">
-           <label className="text-sm font-medium text-gray-700">予測期間:</label>
-           <select
-             value={predictionMonths}
-             onChange={(e) => setPredictionMonths(Number(e.target.value))}
-             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-           >
-             <option value={3}>3ヶ月</option>
-             <option value={6}>6ヶ月</option>
-             <option value={12}>12ヶ月</option>
-             <option value={24}>24ヶ月</option>
-           </select>
-         </div>
-       </div>
+---
 
-       {/* モード別の説明文 */}
-       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-         <p className="text-sm text-blue-800">
-           {predictionMode === 'actual'
-             ? '過去3ヶ月の実績平均から予測しています'
-             : 'シミュレーション設定の売上比率から予測しています'}
-         </p>
-       </div>
+### Phase 2: 履歴保存・精度向上（後回しOK）
 
-       {/* 予測データ表示 */}
-       {predictionLoading ? (
-         <div className="animate-pulse space-y-4">
-           <div className="h-20 bg-gray-200 rounded"></div>
-           <div className="h-64 bg-gray-200 rounded"></div>
-         </div>
-       ) : futurePrediction ? (
-         <div className="space-y-6">
-           <CashDepletionAlert warning={futurePrediction.cashDepletionWarning} />
-           <FutureCashFlowPrediction data={futurePrediction} />
-         </div>
-       ) : (
-         <p className="text-gray-500 text-center py-8">データがありません</p>
-       )}
-     </div>
-   )}
-   ```
+#### タスク2-1: PL履歴保存シートの作成
+
+**手動作業**: Googleスプレッドシート内に「PL比率履歴」シートを作成
+
+---
+
+#### タスク2-2: PL履歴保存API作成
+
+**ファイル**: `app/api/financial-statements/save-history/route.ts`（新規作成）
+
+**エンドポイント**: `POST /api/financial-statements/save-history`
+
+**リクエストボディ**:
+```json
+{
+  "year": 2025,
+  "month": 10,
+  "plData": { /* P/Lデータ */ }
+}
+```
+
+---
+
+#### タスク2-3: UI: 履歴保存ボタン追加
+
+**ファイル**: `components/financial-statements/PLDisplay.tsx`
+
+**変更内容**: 「履歴保存」ボタンを追加
+
+---
+
+#### タスク2-4: 履歴データ表示
+
+**新規コンポーネント**: `components/financial-statements/PLHistoryChart.tsx`
+
+**内容**: 過去3-6ヶ月の比率推移を折れ線グラフで表示
 
 ---
 
 ## 📂 実装ファイル一覧
 
-### 新規作成ファイル
+### 新規作成ファイル（Phase 1）
 
-1. **`app/api/simulation-settings/route.ts`**
-   - シミュレーション設定API
+1. **`app/api/simulation-settings/route.ts`** - シミュレーション設定API
+2. **`app/api/tax-payment-settings/route.ts`** - 税金支払設定API
 
-### 修正ファイル
+### 修正ファイル（Phase 1）
 
-1. **`types/financial.ts`**
-   - `SimulationSetting` 型追加
-   - `SimulationSettingsResponse` 型追加
-   - `PredictionMode` 型追加
-   - `FuturePredictionResponse` に `mode` プロパティ追加
-   - `PLDisplayRow` に `salesRatio` プロパティ追加（オプション）
+1. **`types/financial.ts`** - 型定義追加
+2. **`lib/financial-calculations.ts`** - 予測計算ロジック拡張
+3. **`app/api/financial-statements/future-prediction/route.ts`** - クエリパラメータ追加
+4. **`components/financial-statements/PLDisplay.tsx`** - 売上比率カラム追加
+5. **`components/financial-statements/FutureCashFlowPrediction.tsx`** - 税金カラム追加
+6. **`app/dashboard/financial-statements/page.tsx`** - タブ切り替えUI追加
 
-2. **`lib/financial-calculations.ts`**
-   - `predictFutureCashFlow` 関数に `mode` パラメータ追加
-   - `parseSimulationSettings` 関数追加
-   - シミュレーションモードの計算ロジック追加
+### 新規作成ファイル（Phase 2）
 
-3. **`app/api/financial-statements/future-prediction/route.ts`**
-   - クエリパラメータ `mode` の追加
-   - バリデーション追加
-
-4. **`components/financial-statements/PLDisplay.tsx`**
-   - 売上高比率カラムの追加
-   - 各行データに `salesRatio` を計算して表示
-
-5. **`app/dashboard/financial-statements/page.tsx`**
-   - `predictionMode` state 追加
-   - タブ切り替えUI追加
-   - モード別の説明文追加
+1. **`app/api/financial-statements/save-history/route.ts`** - PL履歴保存API
+2. **`components/financial-statements/PLHistoryChart.tsx`** - 履歴グラフ表示
 
 ---
 
 ## ✅ テスト項目
 
-### Phase 1: データ準備の確認
-
-- [ ] Googleスプレッドシートに「シミュレーション設定」シートが作成されている
-- [ ] ヘッダー行が正しく設定されている（A1: 項目名, B1: 売上比率(%), C1: 備考）
-- [ ] 初期データが6項目入力されている（交通費、接待交際費、雑費、印刷代、配送費、人件費）
-- [ ] B列の値が数値（例: `3.0`）であり、パーセント記号がない
-
-### Phase 2: API動作確認
+### Phase 1: 基本機能
 
 #### シミュレーション設定API
 
 - [ ] `GET /api/simulation-settings` が正常にレスポンスを返す
-- [ ] レスポンスに6項目のデータが含まれている
+- [ ] 6項目のデータが取得できる
 - [ ] `salesRatio` が数値として正しく取得されている
 
-**テストコマンド**:
-```bash
-curl "http://127.0.0.1:3000/api/simulation-settings" | python3 -m json.tool
-```
+#### 税金支払設定API
 
-**期待レスポンス**:
-```json
-{
-  "success": true,
-  "data": [
-    { "itemName": "交通費", "salesRatio": 3.0, "notes": "営業活動に伴う交通費" },
-    { "itemName": "接待交際費", "salesRatio": 5.0, "notes": "クライアント接待費" },
-    { "itemName": "雑費", "salesRatio": 2.0, "notes": "その他諸経費" },
-    { "itemName": "印刷代", "salesRatio": 15.0, "notes": "雑誌印刷コスト" },
-    { "itemName": "配送費", "salesRatio": 4.0, "notes": "雑誌配送コスト" },
-    { "itemName": "人件費", "salesRatio": 25.0, "notes": "給与・賞与" }
-  ]
-}
-```
+- [ ] `GET /api/tax-payment-settings` が正常にレスポンスを返す
+- [ ] 計算方法が正しくパースされている（`固定` → `fixed`）
+- [ ] 支払月が1-12の範囲内
 
-#### 未来予測API（実績ベース）
+#### 未来予測API（シミュレーションモード）
 
-- [ ] `GET /api/financial-statements/future-prediction?year=2025&month=10&months=6&mode=actual` が正常動作
-- [ ] レスポンスの `mode` が `"actual"` になっている
-- [ ] 予測値が過去3ヶ月の実績平均と一致している
+- [ ] 予測経費が `予定入金 × 経費系比率合計` で計算されている
+- [ ] 予測給与が `予定入金 × 人件費率` で計算されている
+- [ ] 税金が該当月のみ加算されている
+- [ ] 法人税が `年間利益 × 30%` で計算されている（利益比率）
+- [ ] 消費税が `予定入金 × 5%` で計算されている（売上比率）
 
-#### 未来予測API（シミュレーションベース）
+#### UI確認
 
-- [ ] `GET /api/financial-statements/future-prediction?year=2025&month=10&months=6&mode=simulation` が正常動作
-- [ ] レスポンスの `mode` が `"simulation"` になっている
-- [ ] 予測経費・給与が、予測売上 × シミュレーション設定比率で計算されている
+- [ ] P/Lに「売上比率」カラムが表示されている
+- [ ] タブ切り替えが動作する（実績ベース ⇔ シミュレーション）
+- [ ] 予測テーブルに「税金」カラムが表示されている
+- [ ] 税金支払月に金額が表示され、それ以外の月は0円
 
-**検証例**:
-```
-予測売上: 1,000,000円
-経費系合計比率: 3% + 5% + 2% + 15% + 4% = 29%
-人件費比率: 25%
+### Phase 2: 履歴保存
 
-期待値:
-予測経費: 1,000,000 × 29% = 290,000円
-予測給与: 1,000,000 × 25% = 250,000円
-```
-
-### Phase 3: UI確認
-
-#### P/L表示
-
-- [ ] 損益計算書に「売上比率」カラムが表示されている
-- [ ] 各項目の売上比率が正しく計算されている（売上高が100.0%、他の項目が適切な％）
-- [ ] 売上高が0円の場合、エラーが発生せず `0.0%` または `-` が表示される
-- [ ] 小数点以下1桁で表示されている（例: `25.5%`）
-
-#### 予測キャッシュフロー
-
-- [ ] 「実績ベース」と「シミュレーションベース」のタブボタンが表示されている
-- [ ] タブを切り替えると、データが再取得されている（ローディング表示が出る）
-- [ ] 実績ベースとシミュレーションベースで予測値が異なっている
-- [ ] モード別の説明文が表示されている
-  - 実績ベース: 「過去3ヶ月の実績平均から予測しています」
-  - シミュレーションベース: 「シミュレーション設定の売上比率から予測しています」
-
-### Phase 4: 統合テスト
-
-- [ ] 財務諸表ページで、P/Lの％とシミュレーション設定の％を比較できる
-- [ ] シミュレーション設定シートの値を変更すると、予測キャッシュフロー（シミュレーションベース）の値が変わる
-- [ ] 実績ベースとシミュレーションベースで、現金枯渇警告が異なる場合がある
-- [ ] ビルドが成功する（TypeScriptエラーがない）
-- [ ] 本番環境にデプロイできる
+- [ ] PL履歴保存APIが動作する
+- [ ] 履歴シートにデータが追加される
+- [ ] 履歴グラフが表示される
 
 ---
 
@@ -842,37 +959,39 @@ curl "http://127.0.0.1:3000/api/simulation-settings" | python3 -m json.tool
 
 ### 1. エラーハンドリング
 
-- シミュレーション設定シートが存在しない場合のエラーハンドリング
+- シミュレーション設定シートが存在しない場合のフォールバック
+- 税金支払設定シートが存在しない場合は税金=0として扱う
 - 売上高が0円の場合のゼロ除算エラー対策
-- APIレスポンスが不正な場合のフォールバック
 
-### 2. パフォーマンス
+### 2. データ整合性
 
-- シミュレーションモードでも、既存のデータ取得ロジックを再利用
-- API呼び出しを最小化（タブ切り替え時のみ再取得）
+- 計算方法の文字列（`固定` / `売上比率` / `利益比率`）の正規化
+- 支払月が1-12の範囲外の場合のバリデーション
 
-### 3. UI/UX
+### 3. パフォーマンス
 
-- タブ切り替え時のローディング表示
-- モード別の説明文を明確に表示
-- モバイル対応（タブボタンのレスポンシブデザイン）
-
-### 4. データ整合性
-
-- シミュレーション設定の項目名が固定（ハードコードではなく、柔軟に対応）
-- 項目名の揺れ（全角・半角、スペースなど）に対応する場合は正規化処理を追加
+- API呼び出しを最小化（並列実行）
+- タブ切り替え時のみデータ再取得
 
 ---
 
 ## 🚀 リリース手順
 
-1. **データ準備**: シミュレーション設定シートを作成
-2. **バックエンド実装**: API作成・既存API拡張
-3. **フロントエンド実装**: UI変更・タブ追加
-4. **ローカルテスト**: 上記テスト項目を全て確認
-5. **コミット・プッシュ**: Git管理
-6. **本番デプロイ**: Vercel本番環境へデプロイ
-7. **本番確認**: 実際のデータで動作確認
+### Phase 1
+
+1. Googleスプレッドシートに「シミュレーション設定」「税金支払設定」シートを作成
+2. バックエンド実装（API作成・拡張）
+3. フロントエンド実装（UI変更）
+4. ローカルテスト
+5. コミット・プッシュ
+6. 本番デプロイ
+
+### Phase 2
+
+1. 「PL比率履歴」シート作成
+2. 履歴保存API実装
+3. 履歴表示UI実装
+4. テスト・デプロイ
 
 ---
 
@@ -880,14 +999,14 @@ curl "http://127.0.0.1:3000/api/simulation-settings" | python3 -m json.tool
 
 ### 関連ドキュメント
 
-- `docs/development/development-progress.md` - 現在の開発状況
-- `docs/development/REVENUE-RECOGNITION-REQUIREMENTS.md` - 売上・入金認識の要件定義
-- `CLAUDE.md` - プロジェクト全体の開発ガイド
+- `docs/development/development-progress.md` - 開発進捗
+- `docs/development/REVENUE-RECOGNITION-REQUIREMENTS.md` - 売上認識要件
+- `CLAUDE.md` - 開発ガイド
 
 ### 関連ファイル
 
 - `lib/financial-calculations.ts` - 財務計算ロジック
-- `types/financial.ts` - 財務関連の型定義
+- `types/financial.ts` - 型定義
 - `app/dashboard/financial-statements/page.tsx` - 財務諸表ダッシュボード
 
 ---
