@@ -1,8 +1,9 @@
 // app/api/financial-statements/future-prediction/route.ts
-// 未来の現金推移予測API
+// 未来の現金推移予測API（実績ベース & シミュレーションベース対応）
 
 import { NextRequest, NextResponse } from 'next/server';
 import { predictFutureCashFlow } from '@/lib/financial-calculations';
+import type { PredictionMode } from '@/types/financial';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
     const months = parseInt(searchParams.get('months') || '6');
+    const mode = (searchParams.get('mode') || 'actual') as PredictionMode;
 
     // バリデーション
     if (isNaN(year)) {
@@ -30,9 +32,15 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (mode !== 'actual' && mode !== 'simulation') {
+      return NextResponse.json(
+        { success: false, error: 'modeパラメータは "actual" または "simulation" である必要があります' },
+        { status: 400 }
+      );
+    }
 
     // 未来予測を計算
-    const prediction = await predictFutureCashFlow(year, month, months);
+    const prediction = await predictFutureCashFlow(year, month, months, mode);
 
     return NextResponse.json({
       success: true,

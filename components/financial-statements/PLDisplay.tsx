@@ -32,25 +32,31 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
     );
   }
 
+  // 売上高比率を計算するヘルパー関数
+  const calculateRatio = (value: number): number => {
+    if (data.revenue === 0) return 0;
+    return (value / data.revenue) * 100;
+  };
+
   const rows = [
     // セクション1: 売上総利益（粗利）
-    { label: '売上高', value: data.revenue, section: 'revenue', indent: 0 },
-    { label: '└ 売上原価（経費）', value: data.costOfSales, section: 'cost', indent: 1 },
-    { label: '売上総利益（粗利）', value: data.grossProfit, section: 'gross', indent: 0, isBold: true },
+    { label: '売上高', value: data.revenue, ratio: 100.0, section: 'revenue', indent: 0 },
+    { label: '└ 売上原価（経費）', value: data.costOfSales, ratio: calculateRatio(data.costOfSales), section: 'cost', indent: 1 },
+    { label: '売上総利益（粗利）', value: data.grossProfit, ratio: calculateRatio(data.grossProfit), section: 'gross', indent: 0, isBold: true },
 
     { type: 'divider' }, // セクション区切り
 
     // セクション2: 営業利益
-    { label: '└ 人件費（給与）', value: data.salaryExpenses, section: 'expense', indent: 1 },
-    { label: '└ 固定費', value: data.fixedCosts, section: 'expense', indent: 1 },
-    { label: '営業利益', value: data.operatingProfit, section: 'operating', indent: 0, isBold: true },
+    { label: '└ 人件費（給与）', value: data.salaryExpenses, ratio: calculateRatio(data.salaryExpenses), section: 'expense', indent: 1 },
+    { label: '└ 固定費', value: data.fixedCosts, ratio: calculateRatio(data.fixedCosts), section: 'expense', indent: 1 },
+    { label: '営業利益', value: data.operatingProfit, ratio: calculateRatio(data.operatingProfit), section: 'operating', indent: 0, isBold: true },
 
     { type: 'divider' }, // セクション区切り
 
     // セクション3: 税引後当期純利益
-    { label: '税引前当期純利益', value: data.profitBeforeTax, section: 'beforeTax', indent: 0, isBold: true },
-    { label: `└ 法人税等（${(data.effectiveTaxRate * 100).toFixed(0)}%）`, value: data.incomeTax, section: 'tax', indent: 1 },
-    { label: '税引後当期純利益', value: data.netProfit, section: 'net', indent: 0, isBold: true, isTotal: true },
+    { label: '税引前当期純利益', value: data.profitBeforeTax, ratio: calculateRatio(data.profitBeforeTax), section: 'beforeTax', indent: 0, isBold: true },
+    { label: `└ 法人税等（${(data.effectiveTaxRate * 100).toFixed(0)}%）`, value: data.incomeTax, ratio: calculateRatio(data.incomeTax), section: 'tax', indent: 1 },
+    { label: '税引後当期純利益', value: data.netProfit, ratio: calculateRatio(data.netProfit), section: 'net', indent: 0, isBold: true, isTotal: true },
   ];
 
   return (
@@ -66,13 +72,20 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
       {/* テーブル */}
       <div className="p-6">
         <table className="w-full">
+          <thead>
+            <tr className="border-b-2 border-gray-300">
+              <th className="text-left py-2 px-4 font-semibold text-gray-700">項目</th>
+              <th className="text-right py-2 px-4 font-semibold text-gray-700">金額</th>
+              <th className="text-right py-2 px-4 font-semibold text-gray-700">売上比率</th>
+            </tr>
+          </thead>
           <tbody>
             {rows.map((row, index) => {
               // 区切り線の処理
               if (row.type === 'divider') {
                 return (
                   <tr key={index}>
-                    <td colSpan={2} className="py-2">
+                    <td colSpan={3} className="py-2">
                       <div className="border-t-2 border-gray-300"></div>
                     </td>
                   </tr>
@@ -111,6 +124,14 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
                 textColor = isPositive ? 'text-green-900' : 'text-red-900';
               }
 
+              // 売上比率の表示（売上高が0の場合は「-」）
+              const ratioDisplay = data.revenue === 0
+                ? '-'
+                : `${row.ratio?.toFixed(1)}%`;
+
+              // 比率がマイナスの場合は赤字表示
+              const ratioColor = (row.ratio ?? 0) < 0 ? 'text-red-600' : textColor;
+
               return (
                 <tr key={index} className={bgColor}>
                   <td className={`py-3 px-4 ${row.isBold ? 'font-bold' : ''}`}>
@@ -129,6 +150,9 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
                   </td>
                   <td className={`py-3 px-4 text-right ${row.isBold ? 'font-bold' : ''} ${row.isTotal ? 'text-lg' : ''} ${textColor}`}>
                     {(row.value ?? 0).toLocaleString()}円
+                  </td>
+                  <td className={`py-3 px-4 text-right ${row.isBold ? 'font-bold' : ''} ${ratioColor}`}>
+                    {ratioDisplay}
                   </td>
                 </tr>
               );

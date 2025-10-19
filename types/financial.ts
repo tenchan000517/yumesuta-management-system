@@ -263,7 +263,7 @@ export interface CFDetailsResponse {
 }
 
 /**
- * 月次予測データ
+ * 月次予測データ（拡張版）
  */
 export interface MonthlyPrediction {
   year: number;
@@ -271,13 +271,14 @@ export interface MonthlyPrediction {
   period: string;                    // 例: "2025/11"
 
   // 予測値
-  predictedRevenue: number;          // 予測売上
+  predictedRevenue: number;          // 予測売上（予定入金）
   predictedExpenses: number;         // 予測経費
   predictedSalary: number;           // 予測給与
   predictedFixedCosts: number;       // 予測固定費
+  predictedTax: number;              // 予測税金（シミュレーションモード時のみ使用）
 
   // 計算値
-  netCashFlow: number;               // 純増減（予測売上 - 予測支出）
+  netCashFlow: number;               // 純増減（予測売上 - 予測支出 - 税金）
   cumulativeCashFlow: number;        // 累積現金残高
 
   // メタ情報
@@ -296,12 +297,54 @@ export interface CashDepletionWarning {
 }
 
 /**
- * 未来予測レスポンス
+ * シミュレーション設定項目
+ */
+export interface SimulationSetting {
+  itemName: string;           // A列: 項目名（例: 交通費、接待交際費、人件費など）
+  salesRatio: number;         // B列: 売上比率（％、例: 3.0 = 3%）
+  minimumAmount: number;      // C列: 最低金額（円、売上0円でも発生する金額）
+  notes?: string;             // D列: 備考
+}
+
+/**
+ * 税金支払設定項目
+ */
+export interface TaxPaymentSetting {
+  taxType: string;                               // A列: 税金種別（例: 法人税等、消費税など）
+  paymentMonth: number;                          // B列: 支払月（1-12）
+  calculationMethod: 'fixed' | 'salesRatio' | 'profitRatio';  // C列: 計算方法
+  rateOrAmount: number;                          // D列: 比率（％）または金額（円）
+  notes?: string;                                // E列: 備考
+}
+
+/**
+ * PL比率履歴項目（Phase 2）
+ */
+export interface PLHistoryRecord {
+  yearMonth: string;          // A列: 年月（YYYY/MM）
+  revenue: number;            // B列: 売上高
+  costOfSalesRatio: number;   // D列: 売上原価率(%)
+  salaryRatio: number;        // F列: 人件費率(%)
+  travelExpenseRatio: number; // H列: 交通費率(%)
+  entertainmentRatio: number; // J列: 接待交際費率(%)
+  miscExpenseRatio: number;   // L列: 雑費率(%)
+  fixedCostRatio: number;     // N列: 固定費率(%)
+  operatingProfitRatio: number; // P列: 営業利益率(%)
+}
+
+/**
+ * 未来予測のモード
+ */
+export type PredictionMode = 'actual' | 'simulation';
+
+/**
+ * 未来予測レスポンス（拡張版）
  */
 export interface FuturePredictionResponse {
   // 基準情報
   baseYear: number;
   baseMonth: number;
+  mode: PredictionMode;              // 予測モード（実績ベース or シミュレーション）
   currentCash: number;               // 現在の現金残高
 
   // 過去3ヶ月の実績平均（参考値）

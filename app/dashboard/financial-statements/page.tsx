@@ -23,6 +23,7 @@ export default function FinancialStatementsPage() {
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [predictionMonths, setPredictionMonths] = useState(6); // 予測期間（デフォルト6ヶ月）
+  const [predictionMode, setPredictionMode] = useState<'actual' | 'simulation'>('actual'); // 予測モード
 
   // フィルター（年月・年次切り替え）
   const currentDate = new Date();
@@ -37,7 +38,7 @@ export default function FinancialStatementsPage() {
     if (!isAnnual && selectedMonth !== null) {
       fetchFuturePrediction();
     }
-  }, [selectedYear, selectedMonth, isAnnual, predictionMonths]);
+  }, [selectedYear, selectedMonth, isAnnual, predictionMonths, predictionMode]);
 
   // 財務諸表データ取得
   const fetchFinancialStatements = async () => {
@@ -80,7 +81,7 @@ export default function FinancialStatementsPage() {
     setPredictionLoading(true);
     try {
       const response = await fetch(
-        `/api/financial-statements/future-prediction?year=${selectedYear}&month=${selectedMonth}&months=${predictionMonths}`
+        `/api/financial-statements/future-prediction?year=${selectedYear}&month=${selectedMonth}&months=${predictionMonths}&mode=${predictionMode}`
       );
       const result = await response.json();
 
@@ -260,6 +261,30 @@ export default function FinancialStatementsPage() {
                       <option value={24}>24ヶ月</option>
                     </select>
                   </div>
+                </div>
+
+                {/* タブ切り替え（実績ベース / シミュレーションベース） */}
+                <div className="flex gap-2 mb-4 border-b border-gray-200">
+                  <button
+                    onClick={() => setPredictionMode('actual')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      predictionMode === 'actual'
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    実績ベース
+                  </button>
+                  <button
+                    onClick={() => setPredictionMode('simulation')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      predictionMode === 'simulation'
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    シミュレーションベース
+                  </button>
                 </div>
 
                 {predictionLoading ? (

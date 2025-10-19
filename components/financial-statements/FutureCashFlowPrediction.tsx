@@ -81,6 +81,9 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
                   予測固定費
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                  税金
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
                   純増減
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
@@ -114,6 +117,11 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
                       {formatCurrency(prediction.predictedFixedCosts)}
                     </td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-sm text-right ${
+                      prediction.predictedTax > 0 ? 'text-orange-600 font-medium' : 'text-gray-400'
+                    }`}>
+                      {prediction.predictedTax > 0 ? formatCurrency(prediction.predictedTax) : '-'}
+                    </td>
                     <td className={`px-4 py-3 whitespace-nowrap text-sm text-right font-medium ${
                       prediction.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -136,8 +144,20 @@ export function FutureCashFlowPrediction({ data }: FutureCashFlowPredictionProps
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
         <p className="font-medium mb-1">予測の前提条件</p>
         <ul className="list-disc list-inside space-y-1 text-xs">
-          <li>入金・経費・給与は過去3ヶ月の平均値を使用</li>
-          <li>固定費は現在の値が継続すると仮定</li>
+          {data.mode === 'actual' ? (
+            <>
+              <li>入金・経費・給与は過去3ヶ月の平均値を使用</li>
+              <li>固定費は現在の値が継続すると仮定</li>
+              <li>税金は含まれていません</li>
+            </>
+          ) : (
+            <>
+              <li>入金は契約データの入金予定日ベース</li>
+              <li>経費・給与はシミュレーション設定シートの売上比率（％）を使用</li>
+              <li>固定費は固定費マスタから計算</li>
+              <li>税金は税金支払設定シートから計算（該当月のみ）</li>
+            </>
+          )}
           <li>季節性や特別な要因は考慮していません</li>
           <li>あくまで参考値であり、実際の結果とは異なる場合があります</li>
         </ul>

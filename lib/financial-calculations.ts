@@ -1618,7 +1618,7 @@ export async function calculateBalanceSheetFromData(
 ): Promise<BalanceSheet> {
   const targetMonth = month !== undefined ? month : 12;
   const lastDay = new Date(year, targetMonth, 0).getDate();
-  const asOfDate = \`\${year}/\${String(targetMonth).padStart(2, '0')}/\${String(lastDay).padStart(2, '0')}\`;
+  const asOfDate = `${year}/${String(targetMonth).padStart(2, '0')}/${String(lastDay).padStart(2, '0')}`;
 
   let totalIncome = 0;
   contractData.slice(2).forEach(row => {
@@ -1700,8 +1700,8 @@ export async function calculateBalanceSheetFromData(
   const totalLiabilitiesAndNetAssets = totalLiabilities + totalNetAssets;
 
   return {
-    fiscalYear: \`\${year}年度\`,
-    fiscalMonth: month !== undefined ? \`\${year}/\${String(month).padStart(2, '0')}\` : undefined,
+    fiscalYear: `${year}年度`,
+    fiscalMonth: month !== undefined ? `${year}/${String(month).padStart(2, '0')}` : undefined,
     asOfDate,
     assets: {
       currentAssets: { cash, accountsReceivable, totalCurrentAssets },
@@ -1763,7 +1763,7 @@ export async function calculateCashFlowStatementFromData(
       const amount = parseAmount(row[2]);
       const startMonth = row[6];
       if (isActive && startMonth) {
-        const targetMonthStr = \`\${year}/\${String(month).padStart(2, '0')}\`;
+        const targetMonthStr = `${year}/${String(month).padStart(2, '0')}`;
         if (startMonth <= targetMonthStr) {
           operatingCashOutflow += amount;
         }
@@ -1796,25 +1796,24 @@ export async function calculateCashFlowStatementFromData(
   const endingCash = beginningCash + netCashFlow;
 
   return {
-    fiscalYear: \`\${year}年度\`,
-    fiscalMonth: month !== undefined ? \`\${year}/\${String(month).padStart(2, '0')}\` : undefined,
-    cashAtBeginning: beginningCash,
+    fiscalYear: `${year}年度`,
+    fiscalMonth: month !== undefined ? `${year}/${String(month).padStart(2, '0')}` : undefined,
     operatingActivities: {
-      cashInflow: operatingCashInflow,
-      cashOutflow: operatingCashOutflow,
-      netCashFlow: operatingActivities
+      cashFromCustomers: operatingCashInflow,
+      cashToSuppliers: operatingCashOutflow,
+      netOperatingCashFlow: operatingActivities
     },
     investingActivities: {
-      cashInflow: 0,
-      cashOutflow: 0,
-      netCashFlow: investingActivities
+      purchaseOfFixedAssets: 0,
+      netInvestingCashFlow: investingActivities
     },
     financingActivities: {
-      cashInflow: 0,
-      cashOutflow: 0,
-      netCashFlow: financingActivities
+      proceedsFromBorrowings: 0,
+      repaymentOfBorrowings: 0,
+      netFinancingCashFlow: financingActivities
     },
     netCashFlow,
+    cashAtBeginning: beginningCash,
     cashAtEnd: endingCash,
     generatedAt: new Date().toISOString()
   };
