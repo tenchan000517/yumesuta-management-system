@@ -21,7 +21,8 @@ import {
   FileText,
   Brain,
   Menu,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
@@ -511,6 +512,10 @@ export default function Home() {
             <Link href="/dashboard/workflow/contract" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <FileText className="w-5 h-5" />
               <span>契約業務フロー</span>
+            </Link>
+            <Link href="/dashboard/expenditures" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
+              <Wallet className="w-5 h-5" />
+              <span>支出管理</span>
             </Link>
           </nav>
 
