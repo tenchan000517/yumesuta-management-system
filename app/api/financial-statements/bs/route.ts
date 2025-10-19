@@ -8,19 +8,26 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
-    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
+    const monthParam = searchParams.get('month');
+    const month = monthParam ? parseInt(monthParam) : undefined;
     const initialCash = parseFloat(searchParams.get('initialCash') || '0');
     const capital = parseFloat(searchParams.get('capital') || '1000000');
 
     // バリデーション
-    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+    if (isNaN(year)) {
       return NextResponse.json(
-        { success: false, error: '年月のパラメータが不正です' },
+        { success: false, error: '年のパラメータが不正です' },
+        { status: 400 }
+      );
+    }
+    if (month !== undefined && (isNaN(month) || month < 1 || month > 12)) {
+      return NextResponse.json(
+        { success: false, error: '月のパラメータが不正です（1-12）' },
         { status: 400 }
       );
     }
 
-    // B/S計算
+    // B/S計算（monthがundefinedの場合は年次計算=12月末時点）
     const bs = await calculateBalanceSheet(year, month, initialCash, capital);
 
     return NextResponse.json({
