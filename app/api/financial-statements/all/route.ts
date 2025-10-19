@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const monthParam = searchParams.get('month');
     const month = monthParam ? parseInt(monthParam) : undefined;
     const initialCash = parseFloat(searchParams.get('initialCash') || '0');
-    const capital = parseFloat(searchParams.get('capital') || '1000000');
+    const capital = parseFloat(searchParams.get('capital') || '100000');
 
     // バリデーション
     if (isNaN(year)) {

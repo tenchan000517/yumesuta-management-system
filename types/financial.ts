@@ -58,10 +58,15 @@ export interface ProfitAndLoss {
   salaryExpenses: number;       // 人件費（給与）
   fixedCosts: number;           // 固定費
 
-  // 利益
+  // 利益（段階別）
   grossProfit: number;          // 粗利（売上 - 売上原価）
   operatingProfit: number;      // 営業利益（粗利 - 人件費 - 固定費）
-  netProfit: number;            // 純利益（営業利益 - その他費用、簡易版では営業利益と同じ）
+  profitBeforeTax: number;      // 税引前当期純利益
+  incomeTax: number;            // 法人税等
+  netProfit: number;            // 税引後当期純利益（最終利益）
+
+  // 税率情報
+  effectiveTaxRate: number;     // 適用した実効税率（0.3 = 30%）
 
   // メタデータ
   generatedAt: string;          // 生成日時（ISO 8601形式）
@@ -208,3 +213,50 @@ export const SettlementStatusLabels: Record<Expenditure['settlementStatus'], str
   settled: '清算済み',
   none: '-'
 };
+
+/**
+ * 支払予定一覧の項目（C/F詳細データ）
+ */
+export interface PaymentItem {
+  date: string;              // 支払予定日（YYYY/MM/DD形式）
+  itemName: string;          // 項目名
+  amount: number;            // 金額（正=入金、負=出金）
+  paymentMethod: string;     // 支払方法
+  category: string;          // カテゴリ
+  isPaid: boolean;           // 支払済みかどうか（過去の日付はtrue）
+}
+
+/**
+ * 週次サマリーの項目（C/F詳細データ）
+ */
+export interface WeeklyItem {
+  weekNumber: number;        // 週番号（1, 2, 3...）
+  weekLabel: string;         // 週ラベル（例: "第1週 (10/1-10/7)"）
+  inflow: number;            // 入金合計
+  outflow: number;           // 出金合計
+  netCashFlow: number;       // 純増減（入金 - 出金）
+  majorEvents: Array<{       // 主要イベント（10万円以上の入出金）
+    date: string;
+    itemName: string;
+    amount: number;
+  }> | null;
+}
+
+/**
+ * 日次キャッシュフロー推移の項目（C/F詳細データ）
+ */
+export interface DailyCashFlowItem {
+  date: string;              // 日付（YYYY/MM/DD形式）
+  cash: number;              // その日の現金残高
+  inflow: number;            // その日の入金
+  outflow: number;           // その日の出金
+}
+
+/**
+ * C/F詳細データのレスポンス
+ */
+export interface CFDetailsResponse {
+  paymentSchedule: PaymentItem[];      // 支払予定一覧
+  weeklySummary: WeeklyItem[];         // 週次サマリー
+  dailyCashFlow: DailyCashFlowItem[];  // 日次推移
+}

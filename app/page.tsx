@@ -87,6 +87,13 @@ interface DashboardSummary {
     }>;
     completed: number;           // 完了
   } | null;
+  financial: {
+    revenue: number;             // 売上高
+    operatingProfit: number;     // 営業利益
+    netProfit: number;           // 純利益
+    operatingCashFlow: number;   // 営業CF
+    cashAtEnd: number;           // 期末現金残高
+  } | null;
 }
 
 export default function Home() {
@@ -98,6 +105,7 @@ export default function Home() {
     sns: null,
     partners: null,
     contract: null,
+    financial: null,
   });
   const [quickAccessButtons, setQuickAccessButtons] = useState<QuickAccessButton[]>([]);
   const [loading, setLoading] = useState(false);
@@ -142,7 +150,9 @@ export default function Home() {
       }
 
       // 全APIを並列で取得
-      const [salesRes, yumemagaRes, yumemagaProgressRes, yumemagaNextMonthRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes, contractRes] = await Promise.all([
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      const [salesRes, yumemagaRes, yumemagaProgressRes, yumemagaNextMonthRes, tasksRes, analyticsRes, snsRes, partnersRes, quickAccessRes, keywordRankRes, contractRes, financialRes] = await Promise.all([
         fetch('/api/sales-kpi'),
         fetch('/api/process-schedule'),
         fetch('/api/yumemaga-v2/progress?issue=2025年11月号'),
@@ -154,9 +164,10 @@ export default function Home() {
         fetch('/api/quick-access'),
         fetch('/api/keyword-rank'),
         fetch('/api/contract/reminders'),
+        fetch(`/api/financial-statements/all?year=${currentYear}&month=${currentMonth}`),
       ]);
 
-      const [salesData, yumemagaData, yumemagaProgressData, yumemagaNextMonthData, tasksData, analyticsData, snsData, partnersData, quickAccessData, keywordRankData, contractData] = await Promise.all([
+      const [salesData, yumemagaData, yumemagaProgressData, yumemagaNextMonthData, tasksData, analyticsData, snsData, partnersData, quickAccessData, keywordRankData, contractData, financialData] = await Promise.all([
         salesRes.json(),
         yumemagaRes.json(),
         yumemagaProgressRes.json(),
@@ -168,6 +179,7 @@ export default function Home() {
         quickAccessRes.json(),
         keywordRankRes.json(),
         contractRes.json(),
+        financialRes.json(),
       ]);
 
       // クイックアクセスボタンを設定
@@ -437,6 +449,13 @@ export default function Home() {
           totalStars: partnersData.data?.stars?.length || 0,
         } : null,
         contract: contractSummary,
+        financial: financialData.success ? {
+          revenue: financialData.data?.pl?.revenue || 0,
+          operatingProfit: financialData.data?.pl?.operatingProfit || 0,
+          netProfit: financialData.data?.pl?.netProfit || 0,
+          operatingCashFlow: financialData.data?.cf?.operatingActivities?.netOperatingCashFlow || 0,
+          cashAtEnd: financialData.data?.cf?.cashAtEnd || 0,
+        } : null,
       });
 
       setLastUpdated(new Date());
@@ -516,6 +535,10 @@ export default function Home() {
             <Link href="/dashboard/expenditures" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <Wallet className="w-5 h-5" />
               <span>支出管理</span>
+            </Link>
+            <Link href="/dashboard/financial-statements" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
+              <FileText className="w-5 h-5" />
+              <span>決算書</span>
             </Link>
           </nav>
 
@@ -1468,6 +1491,56 @@ export default function Home() {
 
           {/* 右カラム */}
           <div className="space-y-6">
+            {/* 決算書サマリー */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  決算書（当月）
+                </h3>
+                <Link href="/dashboard/financial-statements" className="text-sm text-blue-600 hover:underline">
+                  詳細 →
+                </Link>
+              </div>
+              {summary.financial ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* 売上高 */}
+                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                    <p className="text-xs text-gray-600 mb-1">売上高</p>
+                    <p className="text-lg font-bold text-blue-700">{summary.financial.revenue.toLocaleString()}円</p>
+                  </div>
+                  {/* 営業利益 */}
+                  <div className={`rounded-lg p-3 border ${summary.financial.operatingProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <p className="text-xs text-gray-600 mb-1">営業利益</p>
+                    <p className={`text-lg font-bold ${summary.financial.operatingProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {summary.financial.operatingProfit.toLocaleString()}円
+                    </p>
+                  </div>
+                  {/* 純利益 */}
+                  <div className={`rounded-lg p-3 border ${summary.financial.netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <p className="text-xs text-gray-600 mb-1">純利益</p>
+                    <p className={`text-lg font-bold ${summary.financial.netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {summary.financial.netProfit.toLocaleString()}円
+                    </p>
+                  </div>
+                  {/* 営業CF */}
+                  <div className={`rounded-lg p-3 border ${summary.financial.operatingCashFlow >= 0 ? 'bg-purple-50 border-purple-200' : 'bg-red-50 border-red-200'}`}>
+                    <p className="text-xs text-gray-600 mb-1">営業CF</p>
+                    <p className={`text-lg font-bold ${summary.financial.operatingCashFlow >= 0 ? 'text-purple-700' : 'text-red-700'}`}>
+                      {summary.financial.operatingCashFlow.toLocaleString()}円
+                    </p>
+                  </div>
+                  {/* 現金残高 */}
+                  <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200 col-span-2">
+                    <p className="text-xs text-gray-600 mb-1">期末現金残高</p>
+                    <p className="text-lg font-bold text-indigo-700">{summary.financial.cashAtEnd.toLocaleString()}円</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm">「更新」ボタンをクリックしてデータを読み込んでください</p>
+              )}
+            </div>
+
             {/* 契約業務フロー */}
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">

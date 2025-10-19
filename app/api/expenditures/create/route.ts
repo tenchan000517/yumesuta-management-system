@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { appendSheetRow } from '@/lib/google-sheets';
+import { calculatePaymentScheduledDate } from '@/lib/payment-schedule';
 import type { Expenditure, ApiResponse } from '@/types/financial';
 
 const SHEET_NAME = '支出管理マスタ';
@@ -26,6 +27,11 @@ export async function POST(request: Request) {
     }
 
     const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+
+    // 支払予定日の自動計算（bodyに指定がない場合）
+    if (!body.paymentScheduledDate) {
+      body.paymentScheduledDate = await calculatePaymentScheduledDate(body);
+    }
 
     // Expenditure型 → スプレッドシート行データに変換
     const rowData = convertToSheetRow(body);
