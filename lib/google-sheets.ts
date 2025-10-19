@@ -40,6 +40,45 @@ function logRequest(log: RequestLog): void {
 }
 
 // ========================================
+// キャッシュ機能（APIクォータ対策）
+// ========================================
+interface CacheEntry {
+  data: any[][];
+  timestamp: number;
+}
+
+interface BatchCacheEntry {
+  data: any[][][];
+  timestamp: number;
+}
+
+// キャッシュストレージ
+const dataCache = new Map<string, CacheEntry>();
+const batchCache = new Map<string, BatchCacheEntry>();
+
+// キャッシュ有効期限: 5分
+const CACHE_TTL = 5 * 60 * 1000;
+
+/**
+ * キャッシュをクリア（全削除）
+ */
+export function clearCache(): void {
+  dataCache.clear();
+  batchCache.clear();
+  console.log('🧹 Cache cleared');
+}
+
+/**
+ * キャッシュ統計を取得
+ */
+export function getCacheStats(): { entries: number; batchEntries: number } {
+  return {
+    entries: dataCache.size,
+    batchEntries: batchCache.size,
+  };
+}
+
+// ========================================
 // サービスアカウント認証情報の型定義
 // ========================================
 interface ServiceAccountCredentials {
@@ -87,7 +126,7 @@ export function getGoogleSheetsClient() {
 }
 
 /**
- * スプレッドシートからデータを取得
+ * スプレッドシートからデータを取得（キャッシュ対応）
  * @param {string} spreadsheetId - スプレッドシートID
  * @param {string} range - 取得範囲（例: 'Sheet1!A1:Z100'）
  * @returns {Promise<any[][]>} スプレッドシートのデータ（2次元配列）
@@ -97,6 +136,19 @@ export async function getSheetData(
   range: string
 ): Promise<any[][]> {
   try {
+    // キャッシュキーを生成
+    const cacheKey = `${spreadsheetId}:${range}`;
+
+    // キャッシュをチェック
+    const cached = dataCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log(`📦 [Cache HIT] ${range}`);
+      return cached.data;
+    }
+
+    // キャッシュミス: API呼び出し
+    console.log(`🌐 [Cache MISS] ${range} - Fetching from API...`);
+
     // リクエストをログに記録
     logRequest({
       timestamp: new Date().toISOString(),
@@ -112,7 +164,15 @@ export async function getSheetData(
       range,
     });
 
-    return response.data.values || [];
+    const data = response.data.values || [];
+
+    // キャッシュに保存
+    dataCache.set(cacheKey, {
+      data,
+      timestamp: Date.now(),
+    });
+
+    return data;
   } catch (error) {
     console.error('Failed to fetch sheet data:', error);
     throw error;
@@ -120,7 +180,7 @@ export async function getSheetData(
 }
 
 /**
- * 複数の範囲からデータを一括取得
+ * 複数の範囲からデータを一括取得（キャッシュ対応）
  * @param {string} spreadsheetId - スプレッドシートID
  * @param {string[]} ranges - 取得範囲の配列
  * @returns {Promise<any[][][]>} 各範囲のデータ配列
@@ -130,22 +190,66 @@ export async function getBatchSheetData(
   ranges: string[]
 ): Promise<any[][][]> {
   try {
-    // リクエストをログに記録
-    logRequest({
-      timestamp: new Date().toISOString(),
-      type: 'getBatchSheetData',
-      spreadsheetId,
-      ranges,
-    });
+    // 各範囲を個別にキャッシュチェック
+    const results: any[][][] = new Array(ranges.length);
+    const uncachedRanges: string[] = [];
+    const uncachedIndices: number[] = [];
 
-    const sheets = getGoogleSheetsClient();
+    for (let i = 0; i < ranges.length; i++) {
+      const range = ranges[i];
+      const cacheKey = `${spreadsheetId}:${range}`;
+      const cached = dataCache.get(cacheKey);
 
-    const response = await sheets.spreadsheets.values.batchGet({
-      spreadsheetId,
-      ranges,
-    });
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`📦 [Cache HIT] ${range}`);
+        results[i] = cached.data;
+      } else {
+        uncachedRanges.push(range);
+        uncachedIndices.push(i);
+      }
+    }
 
-    return response.data.valueRanges?.map((vr) => vr.values || []) || [];
+    // キャッシュミスした範囲がある場合のみAPI呼び出し
+    if (uncachedRanges.length > 0) {
+      console.log(`🌐 [Cache MISS] ${uncachedRanges.length} range(s) - Fetching from API...`);
+
+      // リクエストをログに記録
+      logRequest({
+        timestamp: new Date().toISOString(),
+        type: 'getBatchSheetData',
+        spreadsheetId,
+        ranges: uncachedRanges,
+      });
+
+      const sheets = getGoogleSheetsClient();
+
+      const response = await sheets.spreadsheets.values.batchGet({
+        spreadsheetId,
+        ranges: uncachedRanges,
+      });
+
+      const fetchedData = response.data.valueRanges?.map((vr) => vr.values || []) || [];
+
+      // 取得したデータをキャッシュに保存 & 結果配列に格納
+      for (let i = 0; i < uncachedRanges.length; i++) {
+        const range = uncachedRanges[i];
+        const data = fetchedData[i];
+        const originalIndex = uncachedIndices[i];
+
+        // キャッシュに保存
+        const cacheKey = `${spreadsheetId}:${range}`;
+        dataCache.set(cacheKey, {
+          data,
+          timestamp: Date.now(),
+        });
+
+        results[originalIndex] = data;
+      }
+    } else {
+      console.log(`📦 [Cache HIT] All ${ranges.length} range(s) from cache`);
+    }
+
+    return results;
   } catch (error) {
     console.error('Failed to fetch batch sheet data:', error);
     throw error;
