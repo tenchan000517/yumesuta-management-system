@@ -119,9 +119,9 @@ export default function FinancialStatementsPage() {
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
-      <div className="max-w-7xl mx-auto mb-8">
+      <div className="mx-auto mb-8 pt-8" style={{ paddingLeft: 'var(--page-padding)', paddingRight: 'var(--page-padding)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <button
@@ -219,61 +219,69 @@ export default function FinancialStatementsPage() {
       </div>
 
       {/* 財務諸表表示 */}
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* 損益計算書 */}
-        <PLDisplay data={plData} loading={loading} />
+      <div className="mx-auto pb-8" style={{ paddingLeft: 'var(--page-padding)', paddingRight: 'var(--page-padding)' }}>
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-8">
+          {/* 左カラム: P/L と B/S */}
+          <div className="space-y-8">
+            {/* 損益計算書 */}
+            <PLDisplay data={plData} loading={loading} />
 
-        {/* 貸借対照表 */}
-        <BSDisplay data={bsData} loading={loading} />
+            {/* 貸借対照表 */}
+            <BSDisplay data={bsData} loading={loading} />
+          </div>
 
-        {/* キャッシュフロー計算書 */}
-        <CFDisplay data={cfData} loading={loading} year={selectedYear} month={selectedMonth || undefined} />
+          {/* 右カラム: C/F と 予定キャッシュフロー */}
+          <div className="space-y-8">
+            {/* キャッシュフロー計算書 */}
+            <CFDisplay data={cfData} loading={loading} year={selectedYear} month={selectedMonth || undefined} />
 
-        {/* 未来予測（月次表示時のみ） */}
-        {!isAnnual && selectedMonth !== null && (
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-900">未来予測</h2>
-                <span className="text-sm text-gray-500">
-                  （過去3ヶ月の平均から{predictionMonths}ヶ月先まで予測）
-                </span>
+            {/* 予定キャッシュフロー（月次表示時のみ） */}
+            {!isAnnual && selectedMonth !== null && (
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-gray-900">予定キャッシュフロー</h2>
+                    <span className="text-sm text-gray-500">
+                      （入金予定から{predictionMonths}ヶ月先まで予測）
+                    </span>
+                  </div>
+
+                  {/* 予測期間選択 */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">予測期間:</label>
+                    <select
+                      value={predictionMonths}
+                      onChange={(e) => setPredictionMonths(Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value={3}>3ヶ月</option>
+                      <option value={6}>6ヶ月</option>
+                      <option value={12}>12ヶ月</option>
+                      <option value={24}>24ヶ月</option>
+                    </select>
+                  </div>
+                </div>
+
+                {predictionLoading ? (
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-20 bg-gray-200 rounded"></div>
+                    <div className="h-64 bg-gray-200 rounded"></div>
+                  </div>
+                ) : futurePrediction ? (
+                  <div className="space-y-6">
+                    {/* 現金枯渇警告 */}
+                    <CashDepletionAlert warning={futurePrediction.cashDepletionWarning} />
+
+                    {/* 予測テーブル */}
+                    <FutureCashFlowPrediction data={futurePrediction} />
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">データがありません</p>
+                )}
               </div>
-
-              {/* 予測期間選択 */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">予測期間:</label>
-                <select
-                  value={predictionMonths}
-                  onChange={(e) => setPredictionMonths(Number(e.target.value))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value={3}>3ヶ月</option>
-                  <option value={6}>6ヶ月</option>
-                  <option value={12}>12ヶ月</option>
-                  <option value={24}>24ヶ月</option>
-                </select>
-              </div>
-            </div>
-
-            {predictionLoading ? (
-              <div className="animate-pulse space-y-4">
-                <div className="h-20 bg-gray-200 rounded"></div>
-                <div className="h-64 bg-gray-200 rounded"></div>
-              </div>
-            ) : futurePrediction ? (
-              <div className="space-y-6">
-                {/* 現金枯渇警告 */}
-                <CashDepletionAlert warning={futurePrediction.cashDepletionWarning} />
-
-                {/* 予測テーブル */}
-                <FutureCashFlowPrediction data={futurePrediction} />
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">データがありません</p>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

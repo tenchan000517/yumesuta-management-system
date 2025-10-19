@@ -3,6 +3,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --page-padding: 1rem; /* 16px */
+}
+
+@media (min-width: 1536px) {
+  :root {
+    --page-padding: 8rem; /* 128px */
+  }
+}
+
+@media (min-width: 1800px) {
+  :root {
+    --page-padding: 12rem; /* 192px */
+  }
 }
 
 @theme inline {

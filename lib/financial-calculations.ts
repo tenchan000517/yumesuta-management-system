@@ -56,14 +56,15 @@ function addMonths(dateStr: string, months: number): Date {
 
 /**
  * 金額文字列をパース（カンマ区切りや円マーク対応）
+ * 日本円は整数で扱うため、小数点以下は四捨五入
  */
 function parseAmount(amountStr: string | number | undefined): number {
-  if (typeof amountStr === 'number') return amountStr;
+  if (typeof amountStr === 'number') return Math.round(amountStr);
   if (!amountStr) return 0;
 
   const cleaned = String(amountStr).replace(/[¥,円]/g, '').trim();
   const parsed = parseFloat(cleaned);
-  return isNaN(parsed) ? 0 : parsed;
+  return isNaN(parsed) ? 0 : Math.round(parsed);
 }
 
 /**
@@ -147,8 +148,8 @@ export async function calculateProfitAndLoss(
 
     if (!contractStartDate || contractAmount === 0) return;
 
-    // 月額売上 = 契約金額 ÷ 契約期間
-    const monthlyRevenue = contractAmount / contractPeriodMonths;
+    // 月額売上 = 契約金額 ÷ 契約期間（整数化）
+    const monthlyRevenue = Math.round(contractAmount / contractPeriodMonths);
 
     // 契約期間の各月に月額売上を計上
     for (let i = 0; i < contractPeriodMonths; i++) {
@@ -890,29 +891,18 @@ export async function predictFutureCashFlow(
 ): Promise<FuturePredictionResponse> {
   const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
 
-  // 1. 現在の現金残高を取得
-  const currentBS = await calculateBalanceSheet(baseYear, baseMonth);
+  // 1. すべての必要なデータを一度に取得（API呼び出しを最小化）
+  const [currentBS, historicalData, contractData, expenditureData, fixedCostData] = await Promise.all([
+    calculateBalanceSheet(baseYear, baseMonth),
+    getHistoricalAverages(baseYear, baseMonth),
+    getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
+    getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
+    getSheetData(spreadsheetId, '固定費マスタ!A:H')
+  ]);
+
   const currentCash = currentBS.assets.currentAssets.cash;
 
-  // 2. 過去3ヶ月の実績を取得
-  const historicalData = await getHistoricalAverages(baseYear, baseMonth);
-
-  // 3. 現在有効な固定費を取得
-  const fixedCostData = await getSheetData(spreadsheetId, '固定費マスタ!A:H');
-  let monthlyFixedCosts = 0;
-  const targetMonth = `${baseYear}/${String(baseMonth).padStart(2, '0')}`;
-
-  fixedCostData.slice(1).forEach(row => {
-    const isActive = row[0] === true || row[0] === 'TRUE';
-    const amount = parseAmount(row[2]);
-    const startMonth = row[6];
-
-    if (isActive && startMonth && startMonth <= targetMonth) {
-      monthlyFixedCosts += amount;
-    }
-  });
-
-  // 4. 未来N月分の予測を生成
+  // 2. 未来N月分の予測を生成（メモリ上で計算、追加のAPI呼び出しなし）
   const predictions: MonthlyPrediction[] = [];
   let cumulativeCash = currentCash;
 
@@ -928,15 +918,15 @@ export async function predictFutureCashFlow(
 
     const period = `${futureYear}/${String(futureMonth).padStart(2, '0')}`;
 
-    // 予測値（過去3ヶ月の平均を使用）
-    const predictedRevenue = historicalData.revenue;
-    const predictedExpenses = historicalData.expenses;
-    const predictedSalary = historicalData.salary;
-    const predictedFixedCosts = monthlyFixedCosts;
+    // 予測値をメモリ上のデータから計算（API呼び出しなし）
+    const predictedRevenue = calculatePredictedRevenueForMonth(contractData, futureYear, futureMonth);
+    const predictedExpenses = calculatePredictedExpensesForMonth(expenditureData, futureYear, futureMonth);
+    const predictedSalary = calculatePredictedSalaryForMonth(expenditureData, futureYear, futureMonth);
+    const predictedFixedCosts = calculatePredictedFixedCostsForMonth(fixedCostData, futureYear, futureMonth);
 
-    // 純増減 = 売上 - 経費 - 給与 - 固定費
-    const netCashFlow = predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts;
-    cumulativeCash += netCashFlow;
+    // 純増減 = 売上 - 経費 - 給与 - 固定費（整数化）
+    const netCashFlow = Math.round(predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts);
+    cumulativeCash = Math.round(cumulativeCash + netCashFlow);
 
     predictions.push({
       year: futureYear,
@@ -952,8 +942,11 @@ export async function predictFutureCashFlow(
     });
   }
 
-  // 5. 現金枯渇警告を計算
+  // 3. 現金枯渇警告を計算
   const cashDepletionWarning = calculateCashDepletionWarning(predictions);
+
+  // 4. 基準月の固定費を計算（参考情報）
+  const baseMonthFixedCosts = calculatePredictedFixedCostsForMonth(fixedCostData, baseYear, baseMonth);
 
   return {
     baseYear,
@@ -963,8 +956,8 @@ export async function predictFutureCashFlow(
       revenue: historicalData.revenue,
       expenses: historicalData.expenses,
       salary: historicalData.salary,
-      fixedCosts: monthlyFixedCosts,
-      netCashFlow: historicalData.revenue - historicalData.expenses - historicalData.salary - monthlyFixedCosts
+      fixedCosts: baseMonthFixedCosts,
+      netCashFlow: Math.round(historicalData.revenue - historicalData.expenses - historicalData.salary - baseMonthFixedCosts)
     },
     predictions,
     cashDepletionWarning,
@@ -973,7 +966,7 @@ export async function predictFutureCashFlow(
 }
 
 /**
- * 過去3ヶ月の実績平均を取得（入金実績ベース）
+ * 過去3ヶ月の実績平均を取得（C/Fベース: 現金主義）
  */
 async function getHistoricalAverages(
   baseYear: number,
@@ -1017,19 +1010,161 @@ async function getHistoricalAverages(
     }
   });
 
-  // 過去3ヶ月の経費と給与を合計（P/Lから）
-  for (const { year, month } of months) {
-    const pl = await calculateProfitAndLoss(year, month);
-    totalExpenses += pl.costOfSales;
-    totalSalary += pl.salaryExpenses;
-  }
+  // 過去3ヶ月の経費と給与を合計（C/Fベース: 実際の現金支出）
+  const expenditureData = await getSheetData(spreadsheetId, '支出管理マスタ!A:J');
 
-  // 平均を計算
+  expenditureData.slice(1).forEach(row => {
+    const paymentMethod = row[4];       // E列（支払方法）
+    const settlementDate = row[7];      // H列（清算日）
+    const paymentScheduledDate = row[9]; // J列（支払予定日）
+    const amount = parseAmount(row[2]); // C列（金額）
+    const category = row[3];            // D列（カテゴリ）
+
+    // 支払日の決定（C/Fと同じロジック）
+    let effectivePaymentDate: string | null = null;
+
+    if (paymentMethod === '立替') {
+      if (settlementDate) {
+        effectivePaymentDate = settlementDate;
+      }
+    } else {
+      effectivePaymentDate = paymentScheduledDate;
+    }
+
+    // 有効な支払日がある場合のみカウント
+    if (effectivePaymentDate) {
+      for (const { year, month } of months) {
+        if (isDateInMonth(effectivePaymentDate, year, month)) {
+          if (category === '経費') {
+            totalExpenses += amount;
+          } else if (category === '給与') {
+            totalSalary += amount;
+          }
+          break;
+        }
+      }
+    }
+  });
+
+  // 平均を計算（整数化）
   return {
-    revenue: totalRevenue / 3,
-    expenses: totalExpenses / 3,
-    salary: totalSalary / 3
+    revenue: Math.round(totalRevenue / 3),
+    expenses: Math.round(totalExpenses / 3),
+    salary: Math.round(totalSalary / 3)
   };
+}
+
+/**
+ * 指定月の予測入金を計算（入金予定日ベース）
+ * @param contractData - 契約・入金管理シートのデータ
+ */
+function calculatePredictedRevenueForMonth(contractData: any[][], year: number, month: number): number {
+  let totalRevenue = 0;
+
+  contractData.slice(2).forEach(row => {
+    const paymentScheduledDate = row[11]; // L列（入金予定日）
+    const amount = parseAmount(row[5]);    // F列（契約金額）
+
+    if (isDateInMonth(paymentScheduledDate, year, month)) {
+      totalRevenue += amount;
+    }
+  });
+
+  return Math.round(totalRevenue);
+}
+
+/**
+ * 指定月の予測経費を計算（支払予定日ベース）
+ * @param expenditureData - 支出管理マスタのデータ
+ */
+function calculatePredictedExpensesForMonth(expenditureData: any[][], year: number, month: number): number {
+  let totalExpenses = 0;
+
+  expenditureData.slice(1).forEach(row => {
+    const category = row[3];            // D列（カテゴリ）
+    const paymentMethod = row[4];       // E列（支払方法）
+    const settlementDate = row[7];      // H列（清算日）
+    const paymentScheduledDate = row[9]; // J列（支払予定日）
+    const amount = parseAmount(row[2]); // C列（金額）
+
+    // 経費のみ（給与は別途集計）
+    if (category !== '経費') return;
+
+    // 支払日の決定（C/Fと同じロジック）
+    let effectivePaymentDate: string | null = null;
+
+    if (paymentMethod === '立替') {
+      if (settlementDate) {
+        effectivePaymentDate = settlementDate;
+      }
+    } else {
+      effectivePaymentDate = paymentScheduledDate;
+    }
+
+    if (effectivePaymentDate && isDateInMonth(effectivePaymentDate, year, month)) {
+      totalExpenses += amount;
+    }
+  });
+
+  return Math.round(totalExpenses);
+}
+
+/**
+ * 指定月の予測給与を計算（支払予定日ベース）
+ * @param expenditureData - 支出管理マスタのデータ
+ */
+function calculatePredictedSalaryForMonth(expenditureData: any[][], year: number, month: number): number {
+  let totalSalary = 0;
+
+  expenditureData.slice(1).forEach(row => {
+    const category = row[3];            // D列（カテゴリ）
+    const paymentMethod = row[4];       // E列（支払方法）
+    const settlementDate = row[7];      // H列（清算日）
+    const paymentScheduledDate = row[9]; // J列（支払予定日）
+    const amount = parseAmount(row[2]); // C列（金額）
+
+    // 給与のみ
+    if (category !== '給与') return;
+
+    // 支払日の決定（C/Fと同じロジック）
+    let effectivePaymentDate: string | null = null;
+
+    if (paymentMethod === '立替') {
+      if (settlementDate) {
+        effectivePaymentDate = settlementDate;
+      }
+    } else {
+      effectivePaymentDate = paymentScheduledDate;
+    }
+
+    if (effectivePaymentDate && isDateInMonth(effectivePaymentDate, year, month)) {
+      totalSalary += amount;
+    }
+  });
+
+  return Math.round(totalSalary);
+}
+
+/**
+ * 指定月の予測固定費を計算（固定費マスタベース）
+ * @param fixedCostData - 固定費マスタのデータ
+ */
+function calculatePredictedFixedCostsForMonth(fixedCostData: any[][], year: number, month: number): number {
+  let totalFixedCosts = 0;
+  const targetMonth = `${year}/${String(month).padStart(2, '0')}`;
+
+  fixedCostData.slice(1).forEach(row => {
+    const isActive = row[0] === true || row[0] === 'TRUE';
+    const amount = parseAmount(row[2]); // C列（金額）
+    const startMonth = row[6];          // G列（開始月）
+
+    // 有効かつ開始月が対象月以前
+    if (isActive && startMonth && startMonth <= targetMonth) {
+      totalFixedCosts += amount;
+    }
+  });
+
+  return Math.round(totalFixedCosts);
 }
 
 /**

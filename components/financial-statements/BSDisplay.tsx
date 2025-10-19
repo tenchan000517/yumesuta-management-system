@@ -178,11 +178,11 @@ export function BSDisplay({ data, loading = false }: BSDisplayProps) {
         </p>
       </div>
 
-      {/* 2カラムグリッド */}
+      {/* レスポンシブグリッド */}
       <div className="p-6">
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 左カラム: 資産の部 */}
-          <div className="border-r-2 border-gray-300 pr-4">
+          <div className="lg:border-r-2 lg:border-gray-300 lg:pr-4">
             <table className="w-full">
               <tbody>
                 {adjustedLeftRows.map((row, index) => renderRow(row, index))}
@@ -191,7 +191,7 @@ export function BSDisplay({ data, loading = false }: BSDisplayProps) {
           </div>
 
           {/* 右カラム: 負債・純資産の部 */}
-          <div className="pl-2">
+          <div className="lg:pl-2">
             <table className="w-full">
               <tbody>
                 {adjustedRightRows.map((row, index) => renderRow(row, index))}
