@@ -11,7 +11,10 @@ import type {
   DailyCashFlowItem,
   MonthlyPrediction,
   CashDepletionWarning,
-  FuturePredictionResponse
+  FuturePredictionResponse,
+  PredictionMode,
+  SimulationSetting,
+  TaxPaymentSetting
 } from '@/types/financial';
 
 /**
@@ -878,6 +881,151 @@ export async function calculateDailyCashFlow(
 }
 
 /**
+ * シミュレーション設定をパース
+ */
+function parseSimulationSettings(rawData: any[][]): SimulationSetting[] {
+  const settings: SimulationSetting[] = [];
+
+  for (let i = 1; i < rawData.length; i++) {
+    const row = rawData[i];
+    if (!row || row.length === 0 || !row[0]) continue;
+
+    settings.push({
+      itemName: row[0] || '',
+      salesRatio: parseFloat(row[1]) || 0,
+      // カンマを除去してから数値化（Googleシートのロケール問題対策）
+      minimumAmount: parseFloat(String(row[2] || '0').replace(/,/g, '')) || 0,
+      notes: row[3] || undefined
+    });
+  }
+
+  return settings;
+}
+
+/**
+ * 税金支払設定をパース
+ */
+function parseTaxPaymentSettings(rawData: any[][]): TaxPaymentSetting[] {
+  const settings: TaxPaymentSetting[] = [];
+
+  for (let i = 1; i < rawData.length; i++) {
+    const row = rawData[i];
+    if (!row || row.length === 0 || !row[0]) continue;
+
+    // 計算方法を英語型に変換
+    const calculationMethodStr = row[2] || '固定';
+    let calculationMethod: 'fixed' | 'salesRatio' | 'profitRatio' = 'fixed';
+
+    if (calculationMethodStr === '売上比率') {
+      calculationMethod = 'salesRatio';
+    } else if (calculationMethodStr === '利益比率') {
+      calculationMethod = 'profitRatio';
+    }
+
+    // 支払月のバリデーション
+    const paymentMonth = parseInt(row[1]) || 1;
+    if (paymentMonth < 1 || paymentMonth > 12) {
+      console.warn(`[parseTaxPaymentSettings] 不正な支払月: ${paymentMonth}（行${i + 1}）`);
+      continue;
+    }
+
+    settings.push({
+      taxType: row[0] || '',
+      paymentMonth,
+      calculationMethod,
+      rateOrAmount: parseFloat(row[3]) || 0,
+      notes: row[4] || undefined
+    });
+  }
+
+  return settings;
+}
+
+/**
+ * 税金計算（該当月のみ）
+ * @param year - 対象年
+ * @param month - 対象月
+ * @param revenue - 月次売上
+ * @param expenses - 月次経費
+ * @param salary - 月次給与
+ * @param fixedCosts - 月次固定費
+ * @param taxSettings - 税金支払設定
+ * @returns 税金額
+ */
+function calculateTaxForMonth(
+  year: number,
+  month: number,
+  revenue: number,
+  expenses: number,
+  salary: number,
+  fixedCosts: number,
+  taxSettings: TaxPaymentSetting[]
+): number {
+  // 環境変数から期首情報を取得
+  const fiscalStartYear = parseInt(process.env.FISCAL_YEAR_START_YEAR || '2025');
+  const fiscalStartMonth = parseInt(process.env.FISCAL_YEAR_START_MONTH || '11');
+  const fiscalEndMonth = parseInt(process.env.FISCAL_YEAR_END_MONTH || '10');
+
+  // 第一期判定: 第一期内は税金を計上しない
+  // 第一期の終了年月を計算（例: 2025/11期首、10月決算 → 2026/10期末）
+  let firstFiscalYearEndYear = fiscalStartYear;
+  if (fiscalEndMonth < fiscalStartMonth) {
+    // 決算月が期首月より前の場合、翌年が期末
+    firstFiscalYearEndYear = fiscalStartYear + 1;
+  }
+
+  // 年月を数値化して比較（例: 2026/10 → 2026*12+10 = 24298）
+  const currentYearMonth = year * 12 + month;
+  const firstYearEndYearMonth = firstFiscalYearEndYear * 12 + fiscalEndMonth;
+
+  if (currentYearMonth <= firstYearEndYearMonth) {
+    // 第一期内は税金計上なし（確定申告は第二期に計上される）
+    return 0;
+  }
+
+  let totalTax = 0;
+
+  // 該当月の税金設定を抽出
+  const monthlyTaxes = taxSettings.filter(t => t.paymentMonth === month);
+
+  // 期首からの経過月数を計算
+  let monthsSinceFiscalStart = ((year - fiscalStartYear) * 12) + (month - fiscalStartMonth) + 1;
+
+  // 経過月数が0以下の場合（期首前）は0にする
+  if (monthsSinceFiscalStart <= 0) {
+    monthsSinceFiscalStart = 0;
+  }
+
+  // 経過月数が12を超える場合は、次の会計年度として扱う（12で割った余り）
+  if (monthsSinceFiscalStart > 12) {
+    monthsSinceFiscalStart = ((monthsSinceFiscalStart - 1) % 12) + 1;
+  }
+
+  for (const tax of monthlyTaxes) {
+    if (tax.calculationMethod === 'fixed') {
+      // 固定金額
+      totalTax += tax.rateOrAmount;
+    } else if (tax.calculationMethod === 'salesRatio') {
+      // 売上比率: 月次予定入金 × 比率
+      totalTax += revenue * (tax.rateOrAmount / 100);
+    } else if (tax.calculationMethod === 'profitRatio') {
+      // 利益比率: 期首からの累積利益推定 × 比率
+      // 月次利益を計算
+      const monthlyProfit = revenue - expenses - salary - fixedCosts;
+
+      // 期首からの累積利益を推定（簡易版: 月次利益 × 経過月数）
+      // ※ 実際にはこれまでの各月の利益を合計すべきだが、簡易的に月次利益が一定と仮定
+      const estimatedAccumulatedProfit = monthlyProfit * monthsSinceFiscalStart;
+
+      // 推定確定税額を計算
+      totalTax += estimatedAccumulatedProfit * (tax.rateOrAmount / 100);
+    }
+  }
+
+  return Math.round(totalTax);
+}
+
+/**
  * 未来の現金推移を予測
  * @param baseYear - 基準年
  * @param baseMonth - 基準月
@@ -887,20 +1035,52 @@ export async function calculateDailyCashFlow(
 export async function predictFutureCashFlow(
   baseYear: number,
   baseMonth: number,
-  months: number = 6
+  months: number = 6,
+  mode: PredictionMode = 'actual'
 ): Promise<FuturePredictionResponse> {
   const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
 
-  // 1. すべての必要なデータを一度に取得（API呼び出しを最小化）
-  const [currentBS, historicalData, contractData, expenditureData, fixedCostData] = await Promise.all([
-    calculateBalanceSheet(baseYear, baseMonth),
-    getHistoricalAverages(baseYear, baseMonth),
-    getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
-    getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
-    getSheetData(spreadsheetId, '固定費マスタ!A:H')
-  ]);
+  // 1. すべての必要なデータを一度だけ取得（API呼び出しを最小化・重複排除）
+  // シミュレーションモード時のみ追加シートを取得
+  const dataToFetch = mode === 'simulation'
+    ? [
+        getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
+        getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
+        getSheetData(spreadsheetId, '固定費マスタ!A:H'),
+        getSheetData(spreadsheetId, 'シミュレーション設定!A:D').catch(() => []),
+        getSheetData(spreadsheetId, '税金支払設定!A:E').catch(() => [])
+      ]
+    : [
+        getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
+        getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
+        getSheetData(spreadsheetId, '固定費マスタ!A:H')
+      ];
 
+  const sheetDataResults = await Promise.all(dataToFetch);
+
+  // データを変数に割り当て
+  const contractData = sheetDataResults[0];
+  const expenditureData = sheetDataResults[1];
+  const fixedCostData = sheetDataResults[2];
+  const simulationData = mode === 'simulation' ? sheetDataResults[3] : undefined;
+  const taxData = mode === 'simulation' ? sheetDataResults[4] : undefined;
+
+  // 2. B/Sと過去実績を取得（TODO: 将来的には取得済みデータを再利用して最適化）
+  // 注意: これらの関数は内部でAPI呼び出しを行うため、上記で取得したデータと重複しています
+  // 完全な最適化には関数のリファクタリングが必要ですが、まずは動作確認を優先します
+  const currentBS = await calculateBalanceSheet(baseYear, baseMonth);
   const currentCash = currentBS.assets.currentAssets.cash;
+
+  const historicalData = await getHistoricalAverages(baseYear, baseMonth);
+
+  // シミュレーション設定と税金設定をパース（シミュレーションモード時のみ）
+  let simulationSettings: SimulationSetting[] = [];
+  let taxSettings: TaxPaymentSetting[] = [];
+
+  if (mode === 'simulation' && simulationData && taxData) {
+    simulationSettings = parseSimulationSettings(simulationData);
+    taxSettings = parseTaxPaymentSettings(taxData);
+  }
 
   // 2. 未来N月分の予測を生成（メモリ上で計算、追加のAPI呼び出しなし）
   const predictions: MonthlyPrediction[] = [];
@@ -918,14 +1098,57 @@ export async function predictFutureCashFlow(
 
     const period = `${futureYear}/${String(futureMonth).padStart(2, '0')}`;
 
-    // 予測値をメモリ上のデータから計算（API呼び出しなし）
+    // 予測入金（両モードで共通: 入金予定日ベース）
     const predictedRevenue = calculatePredictedRevenueForMonth(contractData, futureYear, futureMonth);
-    const predictedExpenses = calculatePredictedExpensesForMonth(expenditureData, futureYear, futureMonth);
-    const predictedSalary = calculatePredictedSalaryForMonth(expenditureData, futureYear, futureMonth);
+
+    let predictedExpenses = 0;
+    let predictedSalary = 0;
+    let predictedTax = 0;
+
+    if (mode === 'actual') {
+      // 実績ベースモード: 過去3ヶ月の平均（従来の方式）
+      predictedExpenses = calculatePredictedExpensesForMonth(expenditureData, futureYear, futureMonth);
+      predictedSalary = calculatePredictedSalaryForMonth(expenditureData, futureYear, futureMonth);
+    } else {
+      // シミュレーションモード: 売上比率ベース + 最低金額考慮
+      // 各経費項目ごとに MAX(売上 × 比率, 最低金額) を計算して合算
+      predictedExpenses = simulationSettings
+        .filter(s => ['交通費', '接待交際費', '雑費', '印刷代', '配送費'].includes(s.itemName))
+        .reduce((sum, s) => {
+          const ratioBasedAmount = predictedRevenue * (s.salesRatio / 100);
+          const finalAmount = Math.max(ratioBasedAmount, s.minimumAmount);
+          return sum + finalAmount;
+        }, 0);
+      predictedExpenses = Math.round(predictedExpenses);
+
+      // 人件費も同様に最低金額を考慮
+      const salarySetting = simulationSettings.find(s => s.itemName === '人件費');
+      if (salarySetting) {
+        const ratioBasedSalary = predictedRevenue * (salarySetting.salesRatio / 100);
+        predictedSalary = Math.round(Math.max(ratioBasedSalary, salarySetting.minimumAmount));
+      } else {
+        predictedSalary = 0;
+      }
+
+      // 固定費（両モードで共通）
+      const predictedFixedCosts = calculatePredictedFixedCostsForMonth(fixedCostData, futureYear, futureMonth);
+
+      // 税金計算（シミュレーションモードのみ）
+      predictedTax = calculateTaxForMonth(
+        futureYear,
+        futureMonth,
+        predictedRevenue,
+        predictedExpenses,
+        predictedSalary,
+        predictedFixedCosts,
+        taxSettings
+      );
+    }
+
     const predictedFixedCosts = calculatePredictedFixedCostsForMonth(fixedCostData, futureYear, futureMonth);
 
-    // 純増減 = 売上 - 経費 - 給与 - 固定費（整数化）
-    const netCashFlow = Math.round(predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts);
+    // 純増減 = 売上 - 経費 - 給与 - 固定費 - 税金（整数化）
+    const netCashFlow = Math.round(predictedRevenue - predictedExpenses - predictedSalary - predictedFixedCosts - predictedTax);
     cumulativeCash = Math.round(cumulativeCash + netCashFlow);
 
     predictions.push({
@@ -936,6 +1159,7 @@ export async function predictFutureCashFlow(
       predictedExpenses,
       predictedSalary,
       predictedFixedCosts,
+      predictedTax,
       netCashFlow,
       cumulativeCashFlow: cumulativeCash,
       isPredicted: true
@@ -951,6 +1175,7 @@ export async function predictFutureCashFlow(
   return {
     baseYear,
     baseMonth,
+    mode,
     currentCash,
     historicalAverage: {
       revenue: historicalData.revenue,
@@ -1209,5 +1434,388 @@ function calculateCashDepletionWarning(
     monthsUntilDepletion,
     severity,
     message
+  };
+}
+
+// ========================================
+// 最適化版関数（データを引数で受け取る）
+// ========================================
+
+/**
+ * 損益計算書（P/L）を計算（最適化版：データを引数で受け取る）
+ * @param contractData - 契約・入金管理シートのデータ
+ * @param expenditureData - 支出管理マスタのデータ
+ * @param fixedCostData - 固定費マスタのデータ
+ * @param year - 対象年
+ * @param month - 対象月（1-12、省略時は年度全体）
+ * @returns 損益計算書データ
+ */
+export async function calculateProfitAndLossFromData(
+  contractData: any[][],
+  expenditureData: any[][],
+  fixedCostData: any[][],
+  year: number,
+  month?: number
+): Promise<ProfitAndLoss> {
+  // 1. 売上高の計算
+  let revenue = 0;
+  contractData.slice(2).forEach(row => {
+    const contractStartDate = row[17] || row[4];
+    const contractAmount = parseAmount(row[5]);
+    const contractPeriodMonths = parseInt(row[18]) || 12;
+    const autoRenewal = row[19];
+    const autoRenewalAmount = parseAmount(row[20]);
+
+    if (!contractStartDate || contractAmount === 0) return;
+
+    const monthlyRevenue = Math.round(contractAmount / contractPeriodMonths);
+
+    for (let i = 0; i < contractPeriodMonths; i++) {
+      const revenueDate = addMonths(contractStartDate, i);
+      const revenueYear = revenueDate.getFullYear();
+      const revenueMonth = revenueDate.getMonth() + 1;
+
+      const isInPeriod = month !== undefined
+        ? (revenueYear === year && revenueMonth === month)
+        : isDateInFiscalYear(`${revenueYear}/${String(revenueMonth).padStart(2, '0')}/01`, year);
+
+      if (isInPeriod) {
+        revenue += monthlyRevenue;
+      }
+    }
+
+    if ((autoRenewal === '○' || autoRenewal === '〇') && autoRenewalAmount > 0) {
+      const contractEndDate = addMonths(contractStartDate, contractPeriodMonths);
+      const renewalMonthlyRevenue = autoRenewalAmount;
+
+      if (month !== undefined) {
+        const targetDate = new Date(year, month - 1, 1);
+        const contractEndYear = contractEndDate.getFullYear();
+        const contractEndMonth = contractEndDate.getMonth() + 1;
+        const contractEndFirstDay = new Date(contractEndYear, contractEndMonth - 1, 1);
+
+        if (targetDate >= contractEndFirstDay) {
+          revenue += renewalMonthlyRevenue;
+        }
+      } else {
+        const fiscalStartMonth = getFiscalYearStartMonth();
+        const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1);
+        const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0);
+
+        if (contractEndDate < fiscalEndDate) {
+          const effectiveStartDate = contractEndDate > fiscalStartDate ? contractEndDate : fiscalStartDate;
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12
+                            + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+
+          if (monthsDiff > 0) {
+            revenue += renewalMonthlyRevenue * monthsDiff;
+          }
+        }
+      }
+    }
+  });
+
+  // 2. 支出データの計算
+  let costOfSales = 0;
+  let salaryExpenses = 0;
+
+  expenditureData.slice(1).forEach(row => {
+    const date = row[0];
+    const amount = parseAmount(row[2]);
+    const category = row[3];
+
+    const isInPeriod = month !== undefined
+      ? isDateInMonth(date, year, month)
+      : isDateInFiscalYear(date, year);
+
+    if (isInPeriod) {
+      if (category === '経費') {
+        costOfSales += amount;
+      } else if (category === '給与') {
+        salaryExpenses += amount;
+      }
+    }
+  });
+
+  // 3. 固定費の計算
+  let fixedCosts = 0;
+  if (month !== undefined) {
+    fixedCostData.slice(1).forEach(row => {
+      const isActive = row[0] === true || row[0] === 'TRUE';
+      const amount = parseAmount(row[2]);
+      const startMonth = row[6];
+
+      if (isActive && startMonth) {
+        const targetMonth = `${year}/${String(month).padStart(2, '0')}`;
+        if (startMonth <= targetMonth) {
+          fixedCosts += amount;
+        }
+      }
+    });
+  } else {
+    const fiscalStartMonth = getFiscalYearStartMonth();
+    const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1);
+    const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0);
+
+    fixedCostData.slice(1).forEach(row => {
+      const isActive = row[0] === true || row[0] === 'TRUE';
+      const amount = parseAmount(row[2]);
+      const startMonth = row[6];
+
+      if (isActive && startMonth) {
+        const [startYear, startMon] = startMonth.split('/').map(Number);
+        const fixedCostStartDate = new Date(startYear, startMon - 1, 1);
+
+        if (fixedCostStartDate <= fiscalEndDate) {
+          const effectiveStartDate = fixedCostStartDate > fiscalStartDate ? fixedCostStartDate : fiscalStartDate;
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12
+                            + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+
+          fixedCosts += amount * monthsDiff;
+        }
+      }
+    });
+  }
+
+  // 4. 利益の計算
+  const grossProfit = revenue - costOfSales;
+  const operatingProfit = grossProfit - salaryExpenses - fixedCosts;
+
+  // 5. 税金計算
+  const effectiveTaxRate = 0.3;
+  const profitBeforeTax = operatingProfit;
+  const incomeTax = Math.max(0, profitBeforeTax * effectiveTaxRate);
+  const netProfit = profitBeforeTax - incomeTax;
+
+  return {
+    fiscalYear: `${year}年度`,
+    fiscalMonth: month !== undefined ? `${year}/${String(month).padStart(2, '0')}` : undefined,
+    revenue,
+    costOfSales,
+    salaryExpenses,
+    fixedCosts,
+    grossProfit,
+    operatingProfit,
+    profitBeforeTax,
+    incomeTax,
+    netProfit,
+    effectiveTaxRate,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * 貸借対照表（B/S）を計算（最適化版：データを引数で受け取る）
+ */
+export async function calculateBalanceSheetFromData(
+  contractData: any[][],
+  expenditureData: any[][],
+  fixedCostData: any[][],
+  year: number,
+  month?: number,
+  initialCash: number = 0,
+  capital: number = 100000
+): Promise<BalanceSheet> {
+  const targetMonth = month !== undefined ? month : 12;
+  const lastDay = new Date(year, targetMonth, 0).getDate();
+  const asOfDate = \`\${year}/\${String(targetMonth).padStart(2, '0')}/\${String(lastDay).padStart(2, '0')}\`;
+
+  let totalIncome = 0;
+  contractData.slice(2).forEach(row => {
+    const paymentActualDate = row[12];
+    const amount = parseAmount(row[5]);
+    if (paymentActualDate && isDateBeforeOrEqual(paymentActualDate, asOfDate)) {
+      totalIncome += amount;
+    }
+  });
+
+  let totalExpenses = 0;
+  expenditureData.slice(1).forEach(row => {
+    const date = row[0];
+    const amount = parseAmount(row[2]);
+    if (date && isDateBeforeOrEqual(date, asOfDate)) {
+      totalExpenses += amount;
+    }
+  });
+
+  fixedCostData.slice(1).forEach(row => {
+    const isActive = row[0] === true || row[0] === 'TRUE';
+    const amount = parseAmount(row[2]);
+    const startMonth = row[6];
+    if (isActive && startMonth) {
+      const [startYear, startMon] = startMonth.split('/').map(Number);
+      const startDate = new Date(startYear, startMon - 1);
+      const endDate = new Date(year, targetMonth - 1);
+      if (startDate <= endDate) {
+        const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12
+                          + (endDate.getMonth() - startDate.getMonth()) + 1;
+        totalExpenses += amount * monthsDiff;
+      }
+    }
+  });
+
+  const cash = initialCash + totalIncome - totalExpenses;
+
+  let accountsReceivable = 0;
+  contractData.slice(2).forEach(row => {
+    const contractDate = row[4];
+    const amount = parseAmount(row[5]);
+    const paymentActualDate = row[12];
+    const paymentStatus = row[13];
+    if (contractDate && isDateBeforeOrEqual(contractDate, asOfDate)) {
+      if (!paymentActualDate || paymentStatus === '未入金') {
+        accountsReceivable += amount;
+      }
+    }
+  });
+
+  let accountsPayable = 0;
+  expenditureData.slice(1).forEach(row => {
+    const date = row[0];
+    const amount = parseAmount(row[2]);
+    const paymentMethod = row[4];
+    const settlementStatus = row[6];
+    const paymentScheduledDate = row[9];
+    if (date && isDateBeforeOrEqual(date, asOfDate)) {
+      if (paymentMethod === '立替') {
+        if (settlementStatus === '未清算') {
+          accountsPayable += amount;
+        }
+      } else {
+        if (paymentScheduledDate && !isDateBeforeOrEqual(paymentScheduledDate, asOfDate)) {
+          accountsPayable += amount;
+        }
+      }
+    }
+  });
+
+  const totalCurrentAssets = cash + accountsReceivable;
+  const totalFixedAssets = 0;
+  const totalAssets = totalCurrentAssets + totalFixedAssets;
+  const totalCurrentLiabilities = accountsPayable;
+  const totalFixedLiabilities = 0;
+  const totalLiabilities = totalCurrentLiabilities + totalFixedLiabilities;
+  const retainedEarnings = totalAssets - totalLiabilities - capital;
+  const totalNetAssets = capital + retainedEarnings;
+  const totalLiabilitiesAndNetAssets = totalLiabilities + totalNetAssets;
+
+  return {
+    fiscalYear: \`\${year}年度\`,
+    fiscalMonth: month !== undefined ? \`\${year}/\${String(month).padStart(2, '0')}\` : undefined,
+    asOfDate,
+    assets: {
+      currentAssets: { cash, accountsReceivable, totalCurrentAssets },
+      fixedAssets: { totalFixedAssets },
+      totalAssets
+    },
+    liabilities: {
+      currentLiabilities: { accountsPayable, totalCurrentLiabilities },
+      fixedLiabilities: { totalFixedLiabilities },
+      totalLiabilities
+    },
+    netAssets: { capital, retainedEarnings, totalNetAssets },
+    totalLiabilitiesAndNetAssets,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * キャッシュフロー計算書（C/F）を計算（最適化版：データを引数で受け取る）
+ */
+export async function calculateCashFlowStatementFromData(
+  contractData: any[][],
+  expenditureData: any[][],
+  fixedCostData: any[][],
+  year: number,
+  month?: number,
+  cashAtBeginning?: number
+): Promise<CashFlowStatement> {
+  const previousPeriod = getPreviousFiscalPeriod(year, month);
+  let beginningCash = cashAtBeginning;
+  if (beginningCash === undefined) {
+    const previousBS = await calculateBalanceSheetFromData(contractData, expenditureData, fixedCostData, previousPeriod.year, previousPeriod.month);
+    beginningCash = previousBS.assets.currentAssets.cash;
+  }
+
+  let operatingCashInflow = 0;
+  contractData.slice(2).forEach(row => {
+    const paymentActualDate = row[12];
+    const amount = parseAmount(row[5]);
+    const isInPeriod = month !== undefined ? isDateInMonth(paymentActualDate, year, month) : isDateInFiscalYear(paymentActualDate, year);
+    if (isInPeriod) {
+      operatingCashInflow += amount;
+    }
+  });
+
+  let operatingCashOutflow = 0;
+  expenditureData.slice(1).forEach(row => {
+    const date = row[0];
+    const amount = parseAmount(row[2]);
+    const isInPeriod = month !== undefined ? isDateInMonth(date, year, month) : isDateInFiscalYear(date, year);
+    if (isInPeriod) {
+      operatingCashOutflow += amount;
+    }
+  });
+
+  if (month !== undefined) {
+    fixedCostData.slice(1).forEach(row => {
+      const isActive = row[0] === true || row[0] === 'TRUE';
+      const amount = parseAmount(row[2]);
+      const startMonth = row[6];
+      if (isActive && startMonth) {
+        const targetMonthStr = \`\${year}/\${String(month).padStart(2, '0')}\`;
+        if (startMonth <= targetMonthStr) {
+          operatingCashOutflow += amount;
+        }
+      }
+    });
+  } else {
+    const fiscalStartMonth = getFiscalYearStartMonth();
+    const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1);
+    const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0);
+    fixedCostData.slice(1).forEach(row => {
+      const isActive = row[0] === true || row[0] === 'TRUE';
+      const amount = parseAmount(row[2]);
+      const startMonth = row[6];
+      if (isActive && startMonth) {
+        const [startYear, startMon] = startMonth.split('/').map(Number);
+        const fixedCostStartDate = new Date(startYear, startMon - 1, 1);
+        if (fixedCostStartDate <= fiscalEndDate) {
+          const effectiveStartDate = fixedCostStartDate > fiscalStartDate ? fixedCostStartDate : fiscalStartDate;
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12 + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+          operatingCashOutflow += amount * monthsDiff;
+        }
+      }
+    });
+  }
+
+  const operatingActivities = operatingCashInflow - operatingCashOutflow;
+  const investingActivities = 0;
+  const financingActivities = 0;
+  const netCashFlow = operatingActivities + investingActivities + financingActivities;
+  const endingCash = beginningCash + netCashFlow;
+
+  return {
+    fiscalYear: \`\${year}年度\`,
+    fiscalMonth: month !== undefined ? \`\${year}/\${String(month).padStart(2, '0')}\` : undefined,
+    cashAtBeginning: beginningCash,
+    operatingActivities: {
+      cashInflow: operatingCashInflow,
+      cashOutflow: operatingCashOutflow,
+      netCashFlow: operatingActivities
+    },
+    investingActivities: {
+      cashInflow: 0,
+      cashOutflow: 0,
+      netCashFlow: investingActivities
+    },
+    financingActivities: {
+      cashInflow: 0,
+      cashOutflow: 0,
+      netCashFlow: financingActivities
+    },
+    netCashFlow,
+    cashAtEnd: endingCash,
+    generatedAt: new Date().toISOString()
   };
 }

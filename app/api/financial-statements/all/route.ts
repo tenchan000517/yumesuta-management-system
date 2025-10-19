@@ -1,11 +1,12 @@
 // app/api/financial-statements/all/route.ts
-// 財務3表一括取得API
+// 財務3表一括取得API（最適化版：データ重複取得を削減）
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getSheetData } from '@/lib/google-sheets';
 import {
-  calculateProfitAndLoss,
-  calculateBalanceSheet,
-  calculateCashFlowStatement
+  calculateProfitAndLossFromData,
+  calculateBalanceSheetFromData,
+  calculateCashFlowStatementFromData
 } from '@/lib/financial-calculations';
 
 export async function GET(request: NextRequest) {
@@ -31,11 +32,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 財務3表を並列計算（monthがundefinedの場合は年次計算）
+    const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+
+    // 最適化: 必要なシートデータを1回だけ並列取得
+    const [contractData, expenditureData, fixedCostData] = await Promise.all([
+      getSheetData(spreadsheetId, '契約・入金管理!A:AH'),
+      getSheetData(spreadsheetId, '支出管理マスタ!A:J'),
+      getSheetData(spreadsheetId, '固定費マスタ!A:H')
+    ]);
+
+    // 取得したデータを使って財務3表を並列計算
     const [pl, bs, cf] = await Promise.all([
-      calculateProfitAndLoss(year, month),
-      calculateBalanceSheet(year, month, initialCash, capital),
-      calculateCashFlowStatement(year, month)
+      calculateProfitAndLossFromData(contractData, expenditureData, fixedCostData, year, month),
+      calculateBalanceSheetFromData(contractData, expenditureData, fixedCostData, year, month, initialCash, capital),
+      calculateCashFlowStatementFromData(contractData, expenditureData, fixedCostData, year, month)
     ]);
 
     return NextResponse.json({
