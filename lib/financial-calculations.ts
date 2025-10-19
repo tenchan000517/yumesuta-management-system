@@ -2,7 +2,14 @@
 // 財務諸表計算ロジック
 
 import { getSheetData } from '@/lib/google-sheets';
-import type { ProfitAndLoss, BalanceSheet, CashFlowStatement } from '@/types/financial';
+import type {
+  ProfitAndLoss,
+  BalanceSheet,
+  CashFlowStatement,
+  PaymentItem,
+  WeeklyItem,
+  DailyCashFlowItem
+} from '@/types/financial';
 
 /**
  * 日付が指定された年月の範囲内かどうかをチェック
@@ -48,6 +55,61 @@ function parseAmount(amountStr: string | number | undefined): number {
 }
 
 /**
+ * 会計年度の開始月を取得（環境変数から、デフォルトは10月）
+ */
+function getFiscalYearStartMonth(): number {
+  const startMonth = parseInt(process.env.FISCAL_YEAR_START_MONTH || '10');
+  return startMonth >= 1 && startMonth <= 12 ? startMonth : 10;
+}
+
+/**
+ * 前期の年月を取得（会計年度対応）
+ * @param year - 現在の年
+ * @param month - 現在の月（省略時は年次）
+ * @returns { year: 前期の年, month?: 前期の月 }
+ */
+function getPreviousFiscalPeriod(year: number, month?: number): { year: number; month?: number } {
+  const fiscalStartMonth = getFiscalYearStartMonth();
+
+  if (month === undefined) {
+    // 年次計算の場合: 前年度末（前年の決算月）
+    // 会計年度が10月開始の場合、決算月は9月なので前年度末は前年の9月
+    return { year: year - 1, month: fiscalStartMonth - 1 };
+  } else if (month === fiscalStartMonth) {
+    // 期首月の場合: 前年度末（前年の決算月）
+    return { year: year - 1, month: fiscalStartMonth - 1 };
+  } else if (month < fiscalStartMonth) {
+    // 期首より前の月（年をまたぐケース）
+    // 例: 会計年度が10月開始で、現在が2025年3月の場合
+    // 前月は2025年2月（同じ会計年度内）
+    return { year, month: month - 1 };
+  } else {
+    // 期首より後の月（同じ暦年内）
+    return { year, month: month - 1 };
+  }
+}
+
+/**
+ * 日付が指定された会計年度の範囲内かどうかをチェック
+ * @param dateStr - チェック対象の日付文字列
+ * @param fiscalYear - 会計年度（例: 2025年度 = 2025年10月〜2026年9月）
+ * @returns 範囲内ならtrue
+ */
+function isDateInFiscalYear(dateStr: string, fiscalYear: number): boolean {
+  if (!dateStr) return false;
+
+  const date = new Date(dateStr);
+  const fiscalStartMonth = getFiscalYearStartMonth();
+
+  // 会計年度の開始日と終了日を計算
+  // 例: 2025年度（10月開始）= 2025/10/01 〜 2026/09/30
+  const fiscalStartDate = new Date(fiscalYear, fiscalStartMonth - 1, 1);
+  const fiscalEndDate = new Date(fiscalYear + 1, fiscalStartMonth - 1, 0); // 翌年の期首月の前日
+
+  return date >= fiscalStartDate && date <= fiscalEndDate;
+}
+
+/**
  * 損益計算書（P/L）を計算
  * @param year - 対象年
  * @param month - 対象月（1-12、省略時は年度全体）
@@ -70,7 +132,7 @@ export async function calculateProfitAndLoss(
 
     const isInPeriod = month !== undefined
       ? isDateInMonth(paymentActualDate, year, month)
-      : isDateInYear(paymentActualDate, year);
+      : isDateInFiscalYear(paymentActualDate, year);
 
     if (isInPeriod) {
       revenue += amount;
@@ -91,7 +153,7 @@ export async function calculateProfitAndLoss(
 
     const isInPeriod = month !== undefined
       ? isDateInMonth(date, year, month)
-      : isDateInYear(date, year);
+      : isDateInFiscalYear(date, year);
 
     if (isInPeriod) {
       if (category === '経費') {
@@ -122,7 +184,11 @@ export async function calculateProfitAndLoss(
       }
     });
   } else {
-    // 年次計算: 各固定費を有効月数分カウント
+    // 年次計算: 各固定費を会計年度内の有効月数分カウント
+    const fiscalStartMonth = getFiscalYearStartMonth();
+    const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1); // 会計年度開始日
+    const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0); // 会計年度終了日（翌年の期首月の前日）
+
     fixedCostData.slice(1).forEach(row => {
       const isActive = row[0] === true || row[0] === 'TRUE';
       const amount = parseAmount(row[2]);
@@ -130,11 +196,18 @@ export async function calculateProfitAndLoss(
 
       if (isActive && startMonth) {
         const [startYear, startMon] = startMonth.split('/').map(Number);
-        // 対象年の1月〜12月のうち、固定費が有効な月数を計算
-        if (startYear < year || (startYear === year && startMon <= 12)) {
-          const effectiveStartMonth = startYear < year ? 1 : startMon;
-          const monthsCount = 12 - effectiveStartMonth + 1;
-          fixedCosts += amount * monthsCount;
+        const fixedCostStartDate = new Date(startYear, startMon - 1, 1);
+
+        // 固定費開始日が会計年度終了日以前の場合のみ対象
+        if (fixedCostStartDate <= fiscalEndDate) {
+          // 有効期間の開始日: 固定費開始日 vs 会計年度開始日の遅い方
+          const effectiveStartDate = fixedCostStartDate > fiscalStartDate ? fixedCostStartDate : fiscalStartDate;
+
+          // 有効月数を計算
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12
+                            + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+
+          fixedCosts += amount * monthsDiff;
         }
       }
     });
@@ -143,7 +216,12 @@ export async function calculateProfitAndLoss(
   // 4. 利益の計算
   const grossProfit = revenue - costOfSales;
   const operatingProfit = grossProfit - salaryExpenses - fixedCosts;
-  const netProfit = operatingProfit; // 簡易版では営業利益と同じ
+
+  // 5. 税金計算
+  const effectiveTaxRate = 0.3; // 実効税率30%
+  const profitBeforeTax = operatingProfit;
+  const incomeTax = Math.max(0, profitBeforeTax * effectiveTaxRate); // 赤字の場合は税金0
+  const netProfit = profitBeforeTax - incomeTax;
 
   return {
     fiscalYear: `${year}年度`,
@@ -154,7 +232,10 @@ export async function calculateProfitAndLoss(
     fixedCosts,
     grossProfit,
     operatingProfit,
+    profitBeforeTax,
+    incomeTax,
     netProfit,
+    effectiveTaxRate,
     generatedAt: new Date().toISOString()
   };
 }
@@ -164,14 +245,14 @@ export async function calculateProfitAndLoss(
  * @param year - 対象年
  * @param month - 対象月（1-12、省略時は12月末時点）
  * @param initialCash - 期首現金残高（デフォルト: 0）
- * @param capital - 資本金（デフォルト: 1000000）
+ * @param capital - 資本金（デフォルト: 100000 = 10万円）
  * @returns 貸借対照表データ
  */
 export async function calculateBalanceSheet(
   year: number,
   month?: number,
   initialCash: number = 0,
-  capital: number = 1000000
+  capital: number = 100000
 ): Promise<BalanceSheet> {
   const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
 
@@ -248,17 +329,28 @@ export async function calculateBalanceSheet(
     }
   });
 
-  // 3. 買掛金（未清算の立替金）の計算
+  // 3. 買掛金（未払金）の計算
   let accountsPayable = 0;
   expenditureData.slice(1).forEach(row => {
-    const date = row[0];                          // A列（日付）
+    const date = row[0];                          // A列（発生日）
     const amount = parseAmount(row[2]);           // C列（金額）
     const paymentMethod = row[4];                 // E列（支払方法）
     const settlementStatus = row[6];              // G列（清算ステータス）
+    const settlementDate = row[7];                // H列（清算日）
+    const paymentScheduledDate = row[9];          // J列（支払予定日）
 
+    // 発生日が基準日以前の場合のみ処理
     if (date && isDateBeforeOrEqual(date, asOfDate)) {
-      if (paymentMethod === '立替' && settlementStatus === '未清算') {
-        accountsPayable += amount;
+      if (paymentMethod === '立替') {
+        // 立替の場合：未清算のみ計上
+        if (settlementStatus === '未清算') {
+          accountsPayable += amount;
+        }
+      } else {
+        // その他の支払方法：支払予定日が基準日より後の場合に未払金として計上
+        if (paymentScheduledDate && !isDateBeforeOrEqual(paymentScheduledDate, asOfDate)) {
+          accountsPayable += amount;
+        }
       }
     }
   });
@@ -332,19 +424,9 @@ export async function calculateCashFlowStatement(
   // 期首現金残高の計算（指定がなければ前期末のB/Sから取得）
   let beginningCash = cashAtBeginning;
   if (beginningCash === undefined) {
-    if (month === undefined) {
-      // 年次計算の場合は前年12月末のB/Sから取得
-      const prevBS = await calculateBalanceSheet(year - 1, 12);
-      beginningCash = prevBS.assets.currentAssets.cash;
-    } else if (month === 1) {
-      // 1月の場合は前年12月のB/Sから取得
-      const prevBS = await calculateBalanceSheet(year - 1, 12);
-      beginningCash = prevBS.assets.currentAssets.cash;
-    } else {
-      // それ以外は前月のB/Sから取得
-      const prevBS = await calculateBalanceSheet(year, month - 1);
-      beginningCash = prevBS.assets.currentAssets.cash;
-    }
+    const previousPeriod = getPreviousFiscalPeriod(year, month);
+    const prevBS = await calculateBalanceSheet(previousPeriod.year, previousPeriod.month);
+    beginningCash = prevBS.assets.currentAssets.cash;
   }
 
   // 1. 営業活動によるキャッシュフロー
@@ -358,7 +440,7 @@ export async function calculateCashFlowStatement(
 
     const isInPeriod = month !== undefined
       ? isDateInMonth(paymentActualDate, year, month)
-      : isDateInYear(paymentActualDate, year);
+      : isDateInFiscalYear(paymentActualDate, year);
 
     if (isInPeriod) {
       cashFromCustomers += amount;
@@ -371,19 +453,34 @@ export async function calculateCashFlowStatement(
 
   let cashToSuppliers = 0;
 
-  // 支出管理マスタからの支払（立替以外）
+  // 支出管理マスタからの支払
   expenditureData.slice(1).forEach(row => {
-    const date = row[0];                // A列（日付）
     const amount = parseAmount(row[2]); // C列（金額）
     const paymentMethod = row[4];       // E列（支払方法）
+    const settlementDate = row[7];      // H列（清算日）
+    const paymentScheduledDate = row[9]; // J列（支払予定日）
 
-    const isInPeriod = month !== undefined
-      ? isDateInMonth(date, year, month)
-      : isDateInYear(date, year);
+    // 支払日の決定
+    let effectivePaymentDate: string | null = null;
 
-    if (isInPeriod) {
-      // 立替以外の支払方法のみカウント（立替は清算時にキャッシュアウト）
-      if (paymentMethod !== '立替') {
+    if (paymentMethod === '立替') {
+      // 立替の場合：清算日を使用（清算済みの場合のみ）
+      if (settlementDate) {
+        effectivePaymentDate = settlementDate;
+      }
+      // 未清算の場合はスキップ（キャッシュアウトしていない）
+    } else {
+      // その他の支払方法：支払予定日を使用
+      effectivePaymentDate = paymentScheduledDate;
+    }
+
+    // 有効な支払日がある場合のみカウント
+    if (effectivePaymentDate) {
+      const isInPeriod = month !== undefined
+        ? isDateInMonth(effectivePaymentDate, year, month)
+        : isDateInFiscalYear(effectivePaymentDate, year);
+
+      if (isInPeriod) {
         cashToSuppliers += amount;
       }
     }
@@ -405,7 +502,11 @@ export async function calculateCashFlowStatement(
       }
     });
   } else {
-    // 年次計算: 各固定費を有効月数分カウント
+    // 年次計算: 各固定費を会計年度内の有効月数分カウント
+    const fiscalStartMonth = getFiscalYearStartMonth();
+    const fiscalStartDate = new Date(year, fiscalStartMonth - 1, 1); // 会計年度開始日
+    const fiscalEndDate = new Date(year + 1, fiscalStartMonth - 1, 0); // 会計年度終了日（翌年の期首月の前日）
+
     fixedCostData.slice(1).forEach(row => {
       const isActive = row[0] === true || row[0] === 'TRUE';
       const amount = parseAmount(row[2]);
@@ -413,10 +514,18 @@ export async function calculateCashFlowStatement(
 
       if (isActive && startMonth) {
         const [startYear, startMon] = startMonth.split('/').map(Number);
-        if (startYear < year || (startYear === year && startMon <= 12)) {
-          const effectiveStartMonth = startYear < year ? 1 : startMon;
-          const monthsCount = 12 - effectiveStartMonth + 1;
-          cashToSuppliers += amount * monthsCount;
+        const fixedCostStartDate = new Date(startYear, startMon - 1, 1);
+
+        // 固定費開始日が会計年度終了日以前の場合のみ対象
+        if (fixedCostStartDate <= fiscalEndDate) {
+          // 有効期間の開始日: 固定費開始日 vs 会計年度開始日の遅い方
+          const effectiveStartDate = fixedCostStartDate > fiscalStartDate ? fixedCostStartDate : fiscalStartDate;
+
+          // 有効月数を計算
+          const monthsDiff = (fiscalEndDate.getFullYear() - effectiveStartDate.getFullYear()) * 12
+                            + (fiscalEndDate.getMonth() - effectiveStartDate.getMonth()) + 1;
+
+          cashToSuppliers += amount * monthsDiff;
         }
       }
     });
@@ -459,4 +568,242 @@ export async function calculateCashFlowStatement(
     cashAtEnd,
     generatedAt: new Date().toISOString()
   };
+}
+
+/**
+ * 支払予定一覧を計算（C/F詳細データ）
+ * @param year - 対象年
+ * @param month - 対象月（1-12）
+ * @returns 支払予定一覧
+ */
+export async function calculatePaymentSchedule(
+  year: number,
+  month: number
+): Promise<PaymentItem[]> {
+  const spreadsheetId = process.env.SALES_SPREADSHEET_ID!;
+  const items: PaymentItem[] = [];
+
+  // 1. 支出管理マスタから支払予定データを取得
+  const expenditureData = await getSheetData(spreadsheetId, '支出管理マスタ!A:J');
+
+  expenditureData.slice(1).forEach(row => {
+    const itemName = row[1];                    // B列: 項目名
+    const amount = parseAmount(row[2]);         // C列: 金額
+    const category = row[3];                    // D列: カテゴリ
+    const paymentMethod = row[4];               // E列: 支払方法
+    const paymentScheduledDate = row[9];        // J列: 支払予定日
+
+    // J列が当月内かチェック
+    if (paymentScheduledDate && isDateInMonth(paymentScheduledDate, year, month)) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const paymentDate = new Date(paymentScheduledDate);
+
+      items.push({
+        date: paymentScheduledDate,
+        itemName,
+        amount: -amount,  // 支出なのでマイナス
+        paymentMethod,
+        category,
+        isPaid: paymentDate < today
+      });
+    }
+  });
+
+  // 2. 固定費マスタから当月の固定費を取得
+  const fixedCostData = await getSheetData(spreadsheetId, '固定費マスタ!A:H');
+
+  fixedCostData.slice(1).forEach(row => {
+    const isActive = row[0] === true || row[0] === 'TRUE';
+    const itemName = row[1];                    // B列: 項目名
+    const amount = parseAmount(row[2]);         // C列: 金額
+    const category = '固定費';                   // D列: カテゴリ
+    const paymentMethod = row[4];               // E列: 支払方法
+    const paymentDay = parseInt(row[5]) || 1;   // F列: 支払日
+    const startMonth = row[6];                  // G列: 開始月
+
+    if (isActive && startMonth) {
+      const targetMonth = `${year}/${String(month).padStart(2, '0')}`;
+
+      // 開始月以降の固定費のみ対象
+      if (startMonth <= targetMonth) {
+        // 支払予定日を計算（当月の支払日）
+        const paymentScheduledDate = `${year}/${String(month).padStart(2, '0')}/${String(paymentDay).padStart(2, '0')}`;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const paymentDate = new Date(paymentScheduledDate);
+
+        items.push({
+          date: paymentScheduledDate,
+          itemName,
+          amount: -amount,  // 支出なのでマイナス
+          paymentMethod,
+          category,
+          isPaid: paymentDate < today
+        });
+      }
+    }
+  });
+
+  // 3. 契約・入金管理シートから入金予定を取得
+  const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:P');
+
+  contractData.slice(1).forEach(row => {
+    const companyName = row[1];                 // B列: 企業名
+    const productName = row[2];                 // C列: 商品名
+    const amount = parseAmount(row[5]);         // F列: 契約金額
+    const paymentScheduledDate = row[11];       // L列: 入金予定日
+
+    // L列が当月内かチェック
+    if (paymentScheduledDate && isDateInMonth(paymentScheduledDate, year, month)) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const paymentDate = new Date(paymentScheduledDate);
+
+      items.push({
+        date: paymentScheduledDate,
+        itemName: `${companyName} - ${productName}`,
+        amount: amount,  // 入金なのでプラス
+        paymentMethod: '売上入金',
+        category: '売上',
+        isPaid: paymentDate < today
+      });
+    }
+  });
+
+  // 日付順にソート
+  items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return items;
+}
+
+/**
+ * 週次サマリーを計算（C/F詳細データ）
+ * @param year - 対象年
+ * @param month - 対象月（1-12）
+ * @returns 週次サマリー
+ */
+export async function calculateWeeklySummary(
+  year: number,
+  month: number
+): Promise<WeeklyItem[]> {
+  // まず支払予定一覧を取得
+  const paymentSchedule = await calculatePaymentSchedule(year, month);
+
+  // 月の日数を取得
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  // 週ごとに分割（1-7日、8-14日、15-21日、22-末日）
+  const weeks: WeeklyItem[] = [];
+  let weekNumber = 1;
+  let startDay = 1;
+
+  while (startDay <= daysInMonth) {
+    const endDay = Math.min(startDay + 6, daysInMonth);
+
+    // この週の期間
+    const weekStart = `${year}/${String(month).padStart(2, '0')}/${String(startDay).padStart(2, '0')}`;
+    const weekEnd = `${year}/${String(month).padStart(2, '0')}/${String(endDay).padStart(2, '0')}`;
+
+    // この週のデータを集計
+    let inflow = 0;
+    let outflow = 0;
+    const majorEvents: Array<{ date: string; itemName: string; amount: number }> = [];
+
+    paymentSchedule.forEach(item => {
+      const itemDate = new Date(item.date);
+      const weekStartDate = new Date(weekStart);
+      const weekEndDate = new Date(weekEnd);
+
+      if (itemDate >= weekStartDate && itemDate <= weekEndDate) {
+        if (item.amount > 0) {
+          inflow += item.amount;
+        } else {
+          outflow += Math.abs(item.amount);
+        }
+
+        // 主要イベント（10万円以上）
+        if (Math.abs(item.amount) >= 100000) {
+          majorEvents.push({
+            date: item.date,
+            itemName: item.itemName,
+            amount: item.amount
+          });
+        }
+      }
+    });
+
+    const netCashFlow = inflow - outflow;
+
+    weeks.push({
+      weekNumber,
+      weekLabel: `第${weekNumber}週 (${startDay}-${endDay}日)`,
+      inflow,
+      outflow,
+      netCashFlow,
+      majorEvents: majorEvents.length > 0 ? majorEvents : null
+    });
+
+    weekNumber++;
+    startDay += 7;
+  }
+
+  return weeks;
+}
+
+/**
+ * 日次キャッシュフロー推移を計算（C/F詳細データ）
+ * @param year - 対象年
+ * @param month - 対象月（1-12）
+ * @returns 日次推移
+ */
+export async function calculateDailyCashFlow(
+  year: number,
+  month: number
+): Promise<DailyCashFlowItem[]> {
+  // まず支払予定一覧を取得
+  const paymentSchedule = await calculatePaymentSchedule(year, month);
+
+  // 期首現金残高を取得（前期末のB/Sから）
+  const previousPeriod = getPreviousFiscalPeriod(year, month);
+  const prevBS = await calculateBalanceSheet(previousPeriod.year, previousPeriod.month);
+  const beginningCash = prevBS.assets.currentAssets.cash;
+
+  // 月の日数を取得
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  // 日ごとのデータを生成
+  const dailyData: DailyCashFlowItem[] = [];
+  let currentCash = beginningCash;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+
+    // その日の入出金を集計
+    let inflow = 0;
+    let outflow = 0;
+
+    paymentSchedule.forEach(item => {
+      if (item.date === dateStr) {
+        if (item.amount > 0) {
+          inflow += item.amount;
+        } else {
+          outflow += Math.abs(item.amount);
+        }
+      }
+    });
+
+    // 現金残高を更新
+    currentCash += inflow - outflow;
+
+    dailyData.push({
+      date: dateStr,
+      cash: currentCash,
+      inflow,
+      outflow
+    });
+  }
+
+  return dailyData;
 }
