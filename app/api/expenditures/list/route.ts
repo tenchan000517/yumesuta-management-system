@@ -158,6 +158,23 @@ function parsePaymentMethod(value: string): Expenditure['paymentMethod'] {
 }
 
 /**
+ * 固定費用の支払方法パース（reimbursement/invoiceは除外）
+ */
+function parseFixedCostPaymentMethod(value: string): FixedCost['paymentMethod'] {
+  const normalized = (value || '').trim();
+  switch (normalized) {
+    case '会社カード':
+      return 'company_card';
+    case '銀行振込':
+      return 'bank_transfer';
+    case '現金':
+      return 'cash';
+    default:
+      return 'cash'; // デフォルトは現金
+  }
+}
+
+/**
  * 清算ステータスの日本語 → 英語変換
  */
 function parseSettlementStatus(value: string): Expenditure['settlementStatus'] {
@@ -208,7 +225,7 @@ function parseFixedCostData(rows: any[][]): FixedCost[] {
       itemName: row[1] || '',
       amount: isNaN(amount) ? 0 : amount,
       category: 'fixed_cost',
-      paymentMethod: parsePaymentMethod(row[4]),
+      paymentMethod: parseFixedCostPaymentMethod(row[4]),
       paymentDay,
       startMonth: row[6] || '',
       notes: row[7] || undefined

@@ -202,7 +202,8 @@ export const PaymentMethodLabels: Record<Expenditure['paymentMethod'], string> =
   company_card: '会社カード',
   reimbursement: '立替',
   bank_transfer: '銀行振込',
-  cash: '現金'
+  cash: '現金',
+  invoice: '請求書'
 };
 
 /**

@@ -71,12 +71,12 @@ export function BSDisplay({ data, loading = false }: BSDisplayProps) {
   if (heightDiff > 0) {
     // 左カラムに空白行を追加
     for (let i = 0; i < heightDiff; i++) {
-      adjustedLeftRows.push({ type: 'spacer' });
+      adjustedLeftRows.push({ type: 'spacer', label: '', section: '' });
     }
   } else if (heightDiff < 0) {
     // 右カラムに空白行を追加
     for (let i = 0; i < Math.abs(heightDiff); i++) {
-      adjustedRightRows.push({ type: 'spacer' });
+      adjustedRightRows.push({ type: 'spacer', label: '', section: '' });
     }
   }
 

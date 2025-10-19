@@ -370,7 +370,7 @@ export async function calculateBalanceSheet(
       // 開始月から基準日までの月数を計算
       const [startYear, startMon] = startMonth.split('/').map(Number);
       const startDate = new Date(startYear, startMon - 1);
-      const endDate = new Date(year, month - 1);
+      const endDate = new Date(year, targetMonth - 1);
 
       if (startDate <= endDate) {
         const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12

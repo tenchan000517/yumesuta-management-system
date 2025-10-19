@@ -138,7 +138,7 @@ export async function GET(request: Request) {
       // 開始月チェック
       const startMonth = row[6] || '';
       if (startMonth) {
-        const [startYear, startMonthNum] = startMonth.split('/').map(s => parseInt(s));
+        const [startYear, startMonthNum] = startMonth.split('/').map((s: string) => parseInt(s));
         if (yearNum < startYear || (yearNum === startYear && monthNum < startMonthNum)) {
           continue; // まだ開始していない
         }

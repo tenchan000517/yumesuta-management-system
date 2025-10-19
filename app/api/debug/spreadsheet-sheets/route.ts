@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       spreadsheetId,
-      title: metadata.properties.title,
+      title: metadata.properties?.title || 'Untitled',
       sheets,
     });
   } catch (error: any) {

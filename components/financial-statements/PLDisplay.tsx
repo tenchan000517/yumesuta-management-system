@@ -79,7 +79,7 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
                 );
               }
 
-              const isPositive = row.value >= 0;
+              const isPositive = (row.value ?? 0) >= 0;
 
               // セクション別の色分け
               let bgColor = 'bg-white';
@@ -128,7 +128,7 @@ export function PLDisplay({ data, loading = false }: PLDisplayProps) {
                     </div>
                   </td>
                   <td className={`py-3 px-4 text-right ${row.isBold ? 'font-bold' : ''} ${row.isTotal ? 'text-lg' : ''} ${textColor}`}>
-                    {row.value.toLocaleString()}円
+                    {(row.value ?? 0).toLocaleString()}円
                   </td>
                 </tr>
               );
