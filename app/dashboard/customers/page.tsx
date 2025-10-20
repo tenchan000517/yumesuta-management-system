@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Building2, RefreshCw, Search } from 'lucide-react';
 import type {
   YumeMagaCompany,
@@ -292,9 +293,11 @@ export default function CustomersDashboard() {
                     </div>
 
                     {/* 詳細ボタン */}
-                    <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold text-sm">
-                      詳細を開く
-                    </button>
+                    <Link href={`/dashboard/customers/${company.companyId}`}>
+                      <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold text-sm">
+                        詳細を開く
+                      </button>
+                    </Link>
                   </div>
                 );
               })}
