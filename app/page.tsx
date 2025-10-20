@@ -22,7 +22,8 @@ import {
   Brain,
   Menu,
   X,
-  Wallet
+  Wallet,
+  Building2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import type { QuickAccessButton } from '@/types/quick-access';
@@ -527,6 +528,10 @@ export default function Home() {
             <Link href="/dashboard/partners" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <Users className="w-5 h-5" />
               <span>パートナー・スター</span>
+            </Link>
+            <Link href="/dashboard/customers" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
+              <Building2 className="w-5 h-5" />
+              <span>顧客管理</span>
             </Link>
             <Link href="/dashboard/workflow/contract" className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
               <FileText className="w-5 h-5" />
