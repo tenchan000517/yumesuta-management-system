@@ -69,6 +69,37 @@ export function clearCache(): void {
 }
 
 /**
+ * 特定のスプレッドシートに関連するキャッシュをクリア
+ * @param spreadsheetId - クリアするスプレッドシートのID
+ * @param range - (オプション) 特定の範囲のみクリア。省略時は全範囲をクリア
+ */
+export function clearCacheForSpreadsheet(spreadsheetId: string, range?: string): void {
+  const keysToDelete: string[] = [];
+
+  // 削除対象のキーを収集
+  for (const key of dataCache.keys()) {
+    if (range) {
+      // 特定範囲のみクリア
+      if (key === `${spreadsheetId}:${range}`) {
+        keysToDelete.push(key);
+      }
+    } else {
+      // スプレッドシート全体のキャッシュをクリア
+      if (key.startsWith(`${spreadsheetId}:`)) {
+        keysToDelete.push(key);
+      }
+    }
+  }
+
+  // キャッシュから削除
+  keysToDelete.forEach(key => dataCache.delete(key));
+
+  if (keysToDelete.length > 0) {
+    console.log(`🧹 Cleared ${keysToDelete.length} cache entries for spreadsheet ${spreadsheetId}${range ? ` (range: ${range})` : ''}`);
+  }
+}
+
+/**
  * キャッシュ統計を取得
  */
 export function getCacheStats(): { entries: number; batchEntries: number } {

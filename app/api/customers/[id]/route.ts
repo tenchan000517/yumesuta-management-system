@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData, updateSheetData } from '@/lib/google-sheets';
+import { getSheetData, updateSheetData, clearCacheForSpreadsheet } from '@/lib/google-sheets';
 import type {
   YumeMagaCompany,
   CompanyField,
@@ -336,6 +336,9 @@ export async function PUT(
       `企業マスター!A${actualRowIndex}:AY${actualRowIndex}`,
       [updatedRow]
     );
+
+    // キャッシュをクリア（更新したスプレッドシート全体）
+    clearCacheForSpreadsheet(spreadsheetId);
 
     // 更新後のデータを返却
     const updatedCompany = parseCompanyRow(updatedRow);
