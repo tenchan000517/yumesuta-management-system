@@ -425,6 +425,7 @@ export default function ContractWorkflowPage() {
         companyId={selectedContract?.companyId}
         contractId={selectedContract?.id}
         companyName={selectedContract?.companyName}
+        contractService={selectedContract?.contractService}
         onStepCompleted={handleStepCompleted}
       />
 

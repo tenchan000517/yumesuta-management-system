@@ -75,40 +75,36 @@ export async function POST(request: Request) {
     }
 
     // 3. 契約詳細を更新
-    // D列が空欄の場合：全項目を更新
-    // D列に値がある場合：L列（入金予定日）とP列（掲載開始号）のみ更新
+    // D列（契約種別）は営業担当が手動入力するため、絶対に上書きしない
+    // フォーマットに値がある場合のみ、該当列を個別に更新
     const currentRow = rows[targetRowIndex - 1];
-    const hasContractService = currentRow[3]; // D列
 
-    if (!hasContractService) {
-      // D列が空欄の場合：全項目を更新
-      const updateValues = [
-        'ゆめマガ',                                // D: 契約サービス
-        parsedData.contractDate,                  // E: 契約日
-        `¥${parsedData.annualFee.toLocaleString()}`, // F: 契約金額
-        '一括',                                   // G: 入金方法
-        '',                                       // H: 契約書送付
-        '',                                       // I: 契約書回収
-        '',                                       // J: 申込書送付
-        '',                                       // K: 申込書回収
-        parsedData.paymentDeadline,               // L: 入金予定日
-        '',                                       // M: 入金実績日
-        '未入金',                                 // N: 入金ステータス
-        '',                                       // O: 遅延日数
-        parsedData.publicationStart,              // P: 掲載開始号
-        ''                                        // Q: 備考
-      ];
-
+    // E列: 契約日（フォーマットに値がある場合のみ）
+    if (parsedData.contractDate) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `${sheetName}!D${targetRowIndex}:Q${targetRowIndex}`,
+        range: `${sheetName}!E${targetRowIndex}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
-          values: [updateValues]
+          values: [[parsedData.contractDate]]
         }
       });
-    } else {
-      // D列に値がある場合：L列（入金予定日）とP列（掲載開始号）のみ更新
+    }
+
+    // F列: 契約金額（フォーマットに値がある場合のみ）
+    if (parsedData.annualFee && parsedData.annualFee > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!F${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[parsedData.annualFee]]
+        }
+      });
+    }
+
+    // L列: 入金予定日（フォーマットに値がある場合のみ）
+    if (parsedData.paymentDeadline) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!L${targetRowIndex}`,
@@ -117,7 +113,15 @@ export async function POST(request: Request) {
           values: [[parsedData.paymentDeadline]]
         }
       });
+    }
 
+    // P列: 掲載開始号（フォーマットに値があり、かつ有効な値の場合のみ）
+    // N/A や「該当せず」などは書き込まない（ゆめマガ以外の契約種別では該当しない項目）
+    if (
+      parsedData.publicationStart &&
+      parsedData.publicationStart !== 'N/A' &&
+      !parsedData.publicationStart.includes('該当せず')
+    ) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!P${targetRowIndex}`,
@@ -127,6 +131,40 @@ export async function POST(request: Request) {
         }
       });
     }
+
+    // R列: 契約開始日（フォーマットに値がある場合のみ）
+    if (parsedData.contractStartDate) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!R${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[parsedData.contractStartDate]]
+        }
+      });
+    }
+
+    // S列: 契約期間（月数）（フォーマットに値がある場合のみ）
+    if (parsedData.contractPeriodMonths && parsedData.contractPeriodMonths > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!S${targetRowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[parsedData.contractPeriodMonths]]
+        }
+      });
+    }
+
+    // T列: 自動更新有無（〇/✖）
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!T${targetRowIndex}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[parsedData.autoRenewal ? '〇' : '✖']]
+      }
+    });
 
     return NextResponse.json({
       success: true,

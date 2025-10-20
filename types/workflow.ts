@@ -122,6 +122,9 @@ export interface ParsedContractForm {
   contractDate: string;
   annualFee: number;
   monthlyFee: number;
+  contractStartDate: string;     // 契約開始日（YYYY/MM/DD）
+  contractPeriodMonths: number;  // 契約期間（月数）
+  autoRenewal: boolean;          // 自動更新有無
   publicationStart: string;
   publicationEnd: string;
   adSize: string;

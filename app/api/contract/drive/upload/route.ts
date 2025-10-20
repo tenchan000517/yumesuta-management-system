@@ -43,7 +43,12 @@ export async function POST(request: NextRequest) {
     const companyName = companyRow[1]; // B列: 企業正式名称
     let companyFolderId = companyRow[25]; // Z列: 企業DriveフォルダID（インデックス25）
 
-    // 4. AE列が空の場合、企業フォルダを作成
+    // 4. 契約・入金管理シートから契約情報を取得（D列: 契約種別）
+    const contractData = await getSheetData(spreadsheetId, '契約・入金管理!A:D');
+    const contractRow = contractData.find((row: any[]) => parseInt(row[0]) === contractId);
+    const contractService = contractRow?.[3] || ''; // D列: 契約種別（ない場合は空文字）
+
+    // 5. 企業フォルダが存在しない場合は作成
     if (!companyFolderId) {
       console.log(`企業フォルダを作成: ${companyName}`);
       companyFolderId = await createFolderWithOAuth(rootFolderId, companyName);
@@ -56,8 +61,11 @@ export async function POST(request: NextRequest) {
       console.log(`企業フォルダIDをZ${actualRowNumber}に記録: ${companyFolderId}`);
     }
 
-    // 5. 契約フォルダを作成・取得（ensureDirectoryWithOAuthが自動判定）
-    const contractName = `契約${String(contractId).padStart(2, '0')}`;
+    // 6. 契約フォルダを作成・取得（契約種別を含む）
+    // フォルダ名: 契約01_ゆめマガ、契約02_ゆめスタパートナー など
+    const contractName = contractService
+      ? `契約${String(contractId).padStart(2, '0')}_${contractService}`
+      : `契約${String(contractId).padStart(2, '0')}`;
     const pathSegments = [contractName]; // 企業フォルダ直下に契約フォルダ
     const targetFolderId = await ensureDirectoryWithOAuth(companyFolderId, pathSegments);
 

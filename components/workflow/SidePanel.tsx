@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, ExternalLink, Square, CheckSquare, Building2, MapPin, Phone, User, CheckCircle2, Upload, FileText } from 'lucide-react';
 import type { WorkflowStep, CompanyMasterData } from '@/types/workflow';
+import { getContractTemplateUrls, isValidContractService } from '@/lib/contract-templates';
 
 interface SidePanelProps {
   step: WorkflowStep | null;
@@ -14,6 +15,7 @@ interface SidePanelProps {
   companyId?: number; // 企業ID（Phase 1.6で追加）
   contractId?: number; // 契約ID（Phase 2.1で追加）
   companyName?: string; // 企業名（Phase 2.2で追加）
+  contractService?: string; // 契約種別（Phase 2.3で追加）
   onStepCompleted?: (stepNumber: number) => void; // ステップ完了コールバック（Phase 2.1で追加）
 }
 
@@ -26,6 +28,7 @@ export function SidePanel({
   companyId,
   contractId,
   companyName,
+  contractService,
   onStepCompleted,
 }: SidePanelProps) {
   const [companyInfo, setCompanyInfo] = useState<CompanyMasterData | null>(null);
@@ -478,32 +481,51 @@ export function SidePanel({
             <section>
               <h3 className="text-lg font-bold text-gray-900 mb-3">ガイド・リンク</h3>
               <div className="space-y-2">
-                {step.guides.map((guide) => (
-                  <button
-                    key={guide.id}
-                    onClick={() => {
-                      if (guide.type === 'modal' && guide.target) {
-                        onOpenEmailModal(guide.target);
-                      } else if (guide.type === 'external' && guide.target) {
-                        window.open(guide.target, '_blank');
-                      }
-                    }}
-                    className="w-full flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors text-left"
-                  >
-                    <span className="text-2xl">{guide.icon || '📄'}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-blue-900">{guide.label}</p>
-                      <p className="text-xs text-blue-600">
-                        {guide.type === 'modal' ? 'メール例文を開く' : '新しいタブで開く'}
-                      </p>
-                    </div>
-                    {guide.type === 'modal' ? (
-                      <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                    ) : (
-                      <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                    )}
-                  </button>
-                ))}
+                {step.guides.map((guide) => {
+                  // 契約種別に応じたURL取得
+                  let targetUrl = guide.target;
+
+                  // ステップ2（基本契約書）またはステップ4（申込書）の場合、契約種別に応じてURL切り替え
+                  if (step.stepNumber === 2 || step.stepNumber === 4) {
+                    if (contractService && isValidContractService(contractService)) {
+                      const templates = getContractTemplateUrls(contractService as any);
+                      targetUrl = step.stepNumber === 2 ? templates.contract : templates.application;
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={guide.id}
+                      onClick={() => {
+                        if (guide.type === 'modal' && guide.target) {
+                          onOpenEmailModal(guide.target);
+                        } else if (guide.type === 'external' && targetUrl) {
+                          window.open(targetUrl, '_blank');
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors text-left"
+                    >
+                      <span className="text-2xl">{guide.icon || '📄'}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-blue-900">{guide.label}</p>
+                        <p className="text-xs text-blue-600">
+                          {guide.type === 'modal' ? 'メール例文を開く' : '新しいタブで開く'}
+                        </p>
+                        {/* 契約種別表示（ステップ2, 4のみ） */}
+                        {(step.stepNumber === 2 || step.stepNumber === 4) && contractService && (
+                          <p className="text-xs text-blue-500 mt-1">
+                            📌 {contractService}用テンプレート
+                          </p>
+                        )}
+                      </div>
+                      {guide.type === 'modal' ? (
+                        <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      ) : (
+                        <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}

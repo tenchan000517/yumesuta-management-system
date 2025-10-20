@@ -9,6 +9,7 @@ export async function POST(request: Request) {
 
     // 正規表現で各フィールドを抽出
     const parsed: ParsedContractForm = {
+      // 必須フィールド（全契約種別共通）
       companyName: extractField(rawText, /企業名(?:・団体名)?[：:\s]*(.+)/, errors, '企業名'),
       representativeTitle: extractField(rawText, /代表者役職:\s*(.+)/, errors, '代表者役職'),
       representativeName: extractField(rawText, /代表者名:\s*(.+)/, errors, '代表者名'),
@@ -17,24 +18,30 @@ export async function POST(request: Request) {
       email: extractField(rawText, /メールアドレス:\s*(.+)/, errors, 'メールアドレス'),
       contactPerson: extractField(rawText, /送信先担当者名:\s*(.+)/, errors, '送信先担当者名'),
       contactEmail: extractField(rawText, /送信先メールアドレス:\s*(.+)/, errors, '送信先メールアドレス'),
-      contractDate: parseWarekiDate(rawText, /契約締結日:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/, errors, '契約締結日'),
+      contractDate: parseWarekiDateOptional(rawText, /契約締結日:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/),
       annualFee: parseNumber(rawText, /契約料金（税別）:\s*([0-9,]+)\s*円\/年/, errors, '契約料金'),
-      monthlyFee: parseNumber(rawText, /自動更新後の月額料金（税別）:\s*([0-9,]+)\s*円\/月/, errors, '月額料金'),
-      publicationStart: extractField(rawText, /掲載開始:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月号/, errors, '掲載開始', (match) => {
+      monthlyFee: parseNumberOptional(rawText, /自動更新後の月額料金（税別）:\s*([0-9,]+)\s*円\/月/),
+      contractStartDate: parseWarekiDateOptional(rawText, /契約開始日:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/),
+      contractPeriodMonths: parseNumberOptional(rawText, /契約期間:\s*([0-9,]+)\s*ヶ月/),
+      autoRenewal: /自動更新:.*?[☑✓]\s*有/.test(rawText),
+
+      // 任意フィールド（ゆめマガ専用・エラーを追加しない）
+      publicationStart: extractFieldOptional(rawText, /掲載開始:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月号/, (match) => {
         const reiwaYear = parseInt(match[1]);
         const month = parseInt(match[2]);
         const year = 2018 + reiwaYear; // 令和元年 = 2019年
         return `${year}年${month}月号`;
       }),
-      publicationEnd: extractField(rawText, /掲載終了:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月号/, errors, '掲載終了', (match) => {
+      publicationEnd: extractFieldOptional(rawText, /掲載終了:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月号/, (match) => {
         const reiwaYear = parseInt(match[1]);
         const month = parseInt(match[2]);
         const year = 2018 + reiwaYear;
         return `${year}年${month}月号`;
       }),
-      adSize: extractField(rawText, /掲載サイズ:\s*(.+)/, errors, '掲載サイズ'),
-      adPosition: extractField(rawText, /掲載位置:\s*(.+)/, errors, '掲載位置'),
-      designFormat: extractField(rawText, /デザイン形式:\s*(.+)/, errors, 'デザイン形式'),
+      adSize: extractFieldOptional(rawText, /掲載サイズ:\s*(.+)/),
+      adPosition: extractFieldOptional(rawText, /掲載位置:\s*(.+)/),
+      designFormat: extractFieldOptional(rawText, /デザイン形式:\s*(.+)/),
+
       sendBasicContract: /基本契約書の送付:.*?[☑✓]\s*有/.test(rawText),
       sendApplication: /申込書の送付:.*?[☑✓]\s*有/.test(rawText),
       paymentDeadline: parseWarekiDate(rawText, /支払期限:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/, errors, '支払期限')
@@ -70,6 +77,19 @@ function extractField(
   return transform ? transform(match) : match[1].trim();
 }
 
+// 任意フィールド用（エラーを追加しない）
+function extractFieldOptional(
+  text: string,
+  pattern: RegExp,
+  transform?: (match: RegExpMatchArray) => string
+): string {
+  const match = text.match(pattern);
+  if (!match) {
+    return '';  // エラーを追加せず空文字を返す
+  }
+  return transform ? transform(match) : match[1].trim();
+}
+
 function parseNumber(
   text: string,
   pattern: RegExp,
@@ -84,6 +104,18 @@ function parseNumber(
   return parseInt(match[1].replace(/,/g, ''));
 }
 
+// 任意の数値フィールド用（エラーを追加しない）
+function parseNumberOptional(
+  text: string,
+  pattern: RegExp
+): number {
+  const match = text.match(pattern);
+  if (!match) {
+    return 0;
+  }
+  return parseInt(match[1].replace(/,/g, ''));
+}
+
 function parseWarekiDate(
   text: string,
   pattern: RegExp,
@@ -93,6 +125,24 @@ function parseWarekiDate(
   const match = text.match(pattern);
   if (!match) {
     errors.push(`${fieldName}が見つかりません`);
+    return '';
+  }
+
+  const reiwaYear = parseInt(match[1]);
+  const month = parseInt(match[2]);
+  const day = parseInt(match[3]);
+  const year = 2018 + reiwaYear; // 令和元年 = 2019年
+
+  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+}
+
+// 任意の和暦日付フィールド用（エラーを追加しない）
+function parseWarekiDateOptional(
+  text: string,
+  pattern: RegExp
+): string {
+  const match = text.match(pattern);
+  if (!match) {
     return '';
   }
 
