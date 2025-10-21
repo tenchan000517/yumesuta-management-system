@@ -50,18 +50,21 @@ export function ProcessSidePanel({
   const { generatedCommand, outputPath } = useMemo(() => {
     if (!filePath) return { generatedCommand: '', outputPath: '' };
 
+    // 既存のクォートを除去してトリム
+    const cleanPath = filePath.trim().replace(/^["']|["']$/g, '');
+
     // パスから親ディレクトリを抽出
-    const isWindows = filePath.includes('\\');
+    const isWindows = cleanPath.includes('\\');
     const separator = isWindows ? '\\' : '/';
-    const lastSeparatorIndex = filePath.lastIndexOf(separator);
-    const directory = lastSeparatorIndex > 0 ? filePath.substring(0, lastSeparatorIndex) : '';
+    const lastSeparatorIndex = cleanPath.lastIndexOf(separator);
+    const directory = lastSeparatorIndex > 0 ? cleanPath.substring(0, lastSeparatorIndex) : '';
 
     // ファイル名から拡張子を除去してoutputPathを生成
-    const fileName = filePath.substring(lastSeparatorIndex + 1);
+    const fileName = cleanPath.substring(lastSeparatorIndex + 1);
     const fileNameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
     const output = directory ? `${directory}${separator}${fileNameWithoutExt}.txt` : `${fileNameWithoutExt}.txt`;
 
-    const command = `faster-whisper "${filePath}" --model medium --language ja --output_dir "${directory}" --output_format txt`;
+    const command = `faster-whisper "${cleanPath}" --model medium --language ja --output_dir "${directory}" --output_format txt`;
 
     return { generatedCommand: command, outputPath: output };
   }, [filePath]);
