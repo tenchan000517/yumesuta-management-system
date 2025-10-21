@@ -18,13 +18,16 @@ import {
   Play,
   FileCode,
   Copy,
+  Edit3,
 } from 'lucide-react';
 import type { ProcessDetail } from '@/types/yumemaga-process';
+import { generateContentOrganizationPrompt } from '@/data/content-organization-prompt-template';
 
 interface ProcessSidePanelProps {
   process: ProcessDetail | null;
   isOpen: boolean;
   onClose: () => void;
+  issue?: string; // 月号（例: "2025年11月号"）
   onChecklistChange?: (processNo: string, checkId: string, checked: boolean) => void;
   onCompleteProcess?: (processNo: string) => void;
   onUploadDeliverable?: (processNo: string, file: File) => void;
@@ -35,6 +38,7 @@ export function ProcessSidePanel({
   process,
   isOpen,
   onClose,
+  issue,
   onChecklistChange,
   onCompleteProcess,
   onUploadDeliverable,
@@ -48,6 +52,13 @@ export function ProcessSidePanel({
   const [copiedCheckCommand, setCopiedCheckCommand] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const requiredDataFileInputRef = useRef<HTMLInputElement>(null);
+
+  // A-4工程（内容整理）用のstate
+  const [interviewerRequests, setInterviewerRequests] = useState('');
+  const [transcriptFilePath, setTranscriptFilePath] = useState('');
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [documentLink, setDocumentLink] = useState('');
+  const [isSavingDocument, setIsSavingDocument] = useState(false);
 
   // コマンド自動生成
   const { generatedCommand, outputPath } = useMemo(() => {
@@ -87,6 +98,67 @@ export function ProcessSidePanel({
     navigator.clipboard.writeText('pip show faster-whisper');
     setCopiedCheckCommand(true);
     setTimeout(() => setCopiedCheckCommand(false), 2000);
+  };
+
+  // A-4工程用: プロンプト自動生成
+  const generatedPrompt = useMemo(() => {
+    if (!transcriptFilePath) return '';
+    return generateContentOrganizationPrompt(transcriptFilePath, interviewerRequests);
+  }, [transcriptFilePath, interviewerRequests]);
+
+  // A-4工程用: プロンプトコピー
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(generatedPrompt);
+    setCopiedPrompt(true);
+    setTimeout(() => setCopiedPrompt(false), 2000);
+  };
+
+  // A-4工程用: Googleドキュメント新規作成
+  const handleCreateDocument = () => {
+    window.open('https://docs.google.com/document/create', '_blank');
+  };
+
+  // A-4工程用: ドキュメント保存（フォルダ移動）
+  const handleSaveDocument = async () => {
+    if (!documentLink.trim()) {
+      alert('Googleドキュメントのリンクを入力してください');
+      return;
+    }
+
+    // リンクからドキュメントIDを抽出
+    const match = documentLink.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      alert('正しいGoogleドキュメントのリンクを入力してください');
+      return;
+    }
+
+    const documentId = match[1];
+
+    setIsSavingDocument(true);
+    try {
+      const res = await fetch('/api/yumemaga-v2/move-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId,
+          processNo: process?.processNo,
+          issue: issue || '',
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ Googleドキュメントを所定のフォルダに移動しました！');
+        setDocumentLink('');
+      } else {
+        alert(`❌ 保存に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('ドキュメント保存エラー:', error);
+      alert('❌ 保存に失敗しました');
+    } finally {
+      setIsSavingDocument(false);
+    }
   };
 
   if (!isOpen || !process) {
@@ -512,6 +584,129 @@ export function ProcessSidePanel({
                   <code className="text-xs text-purple-800 font-mono">{outputPath}</code>
                 </div>
               )}
+            </section>
+          )}
+
+          {/* 内容整理ガイド（工程A-4など内容整理工程のみ表示） */}
+          {process.processNo.endsWith('-4') && process.processName.includes('内容整理') && (
+            <section>
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-600" />
+                内容整理プロンプト生成
+              </h3>
+
+              {/* 文字起こしファイルパス入力 */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  文字起こしファイルのパス
+                </label>
+                <input
+                  type="text"
+                  value={transcriptFilePath}
+                  onChange={(e) => setTranscriptFilePath(e.target.value)}
+                  placeholder="例: C:\Users\YourName\Downloads\interview.txt"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  A-3工程で生成された文字起こしテキストファイルのパスを入力してください
+                </p>
+              </div>
+
+              {/* インタビュワー要望入力 */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  インタビュワーからの要望（任意）
+                </label>
+                <textarea
+                  value={interviewerRequests}
+                  onChange={(e) => setInterviewerRequests(e.target.value)}
+                  placeholder={'例:\n・昔の中高時代の黒歴史のところはがっつり削って大丈夫。\n・高校生へのメッセージを強く聞く取材にしたし、本人もポイントをしっかり押さえてほしいとのことだった。'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-y min-h-[100px]"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  口頭やチャットで受け取った要望をそのまま貼り付けてください
+                </p>
+              </div>
+
+              {/* 生成されたプロンプト */}
+              {generatedPrompt && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      生成されたプロンプト
+                    </label>
+                    <button
+                      onClick={handleCopyPrompt}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 text-xs font-semibold"
+                    >
+                      <Copy className="w-3 h-3" />
+                      {copiedPrompt ? 'コピー済み ✓' : 'コピー'}
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 max-h-64 overflow-y-auto">
+                    <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
+                      {generatedPrompt}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    💡 このプロンプトをコピーして、Claude Codeに貼り付けてください
+                  </p>
+                </div>
+              )}
+
+              {/* Googleドキュメント連携 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-blue-900">
+                  Googleドキュメント作成・保存
+                </h4>
+
+                {/* ステップ1: 新規作成 */}
+                <div>
+                  <p className="text-xs text-blue-800 mb-2">
+                    <strong>ステップ1:</strong> Googleドキュメントを新規作成
+                  </p>
+                  <button
+                    onClick={handleCreateDocument}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Googleドキュメント新規作成
+                  </button>
+                </div>
+
+                {/* ステップ2: リンク貼り付け */}
+                <div>
+                  <p className="text-xs text-blue-800 mb-2">
+                    <strong>ステップ2:</strong> 作成したドキュメントのリンクを貼り付け
+                  </p>
+                  <input
+                    type="text"
+                    value={documentLink}
+                    onChange={(e) => setDocumentLink(e.target.value)}
+                    placeholder="https://docs.google.com/document/d/..."
+                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono"
+                  />
+                </div>
+
+                {/* ステップ3: 保存 */}
+                <div>
+                  <p className="text-xs text-blue-800 mb-2">
+                    <strong>ステップ3:</strong> 所定のフォルダに移動
+                  </p>
+                  <button
+                    onClick={handleSaveDocument}
+                    disabled={!documentLink.trim() || isSavingDocument}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    {isSavingDocument ? '保存中...' : '保存してフォルダに移動'}
+                  </button>
+                </div>
+
+                <p className="text-xs text-blue-700 bg-blue-100 rounded p-2">
+                  💡 保存すると、カテゴリフォルダ/録音データ/月号/ に自動的に移動されます
+                </p>
+              </div>
             </section>
           )}
 

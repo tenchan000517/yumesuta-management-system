@@ -1009,6 +1009,7 @@ export default function YumeMagaV2Page() {
         process={selectedProcess}
         isOpen={isProcessPanelOpen}
         onClose={handleCloseProcessPanel}
+        issue={selectedIssue}
         onChecklistChange={handleChecklistChange}
         onCompleteProcess={handleCompleteProcess}
         onUploadDeliverable={handleUploadDeliverable}
