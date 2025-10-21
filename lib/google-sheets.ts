@@ -75,8 +75,9 @@ export function clearCache(): void {
  */
 export function clearCacheForSpreadsheet(spreadsheetId: string, range?: string): void {
   const keysToDelete: string[] = [];
+  const batchKeysToDelete: string[] = [];
 
-  // 削除対象のキーを収集
+  // 単一範囲キャッシュの削除対象キーを収集
   for (const key of dataCache.keys()) {
     if (range) {
       // 特定範囲のみクリア
@@ -91,11 +92,21 @@ export function clearCacheForSpreadsheet(spreadsheetId: string, range?: string):
     }
   }
 
+  // バッチキャッシュの削除対象キーを収集
+  for (const key of batchCache.keys()) {
+    // バッチキャッシュのキーは "spreadsheetId:ranges" 形式
+    if (key.startsWith(`${spreadsheetId}:`)) {
+      batchKeysToDelete.push(key);
+    }
+  }
+
   // キャッシュから削除
   keysToDelete.forEach(key => dataCache.delete(key));
+  batchKeysToDelete.forEach(key => batchCache.delete(key));
 
-  if (keysToDelete.length > 0) {
-    console.log(`🧹 Cleared ${keysToDelete.length} cache entries for spreadsheet ${spreadsheetId}${range ? ` (range: ${range})` : ''}`);
+  const totalCleared = keysToDelete.length + batchKeysToDelete.length;
+  if (totalCleared > 0) {
+    console.log(`🧹 Cleared ${totalCleared} cache entries (${keysToDelete.length} single, ${batchKeysToDelete.length} batch) for spreadsheet ${spreadsheetId}${range ? ` (range: ${range})` : ''}`);
   }
 }
 
@@ -337,7 +348,10 @@ export async function updateSheetData(
       },
     });
 
-    console.log(`✅ Updated ${values.length} rows in ${range}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Updated ${values.length} rows in ${range} (cache cleared)`);
   } catch (error) {
     console.error('Failed to update sheet data:', error);
     throw error;
@@ -420,7 +434,10 @@ export async function appendSheetData(
       },
     });
 
-    console.log(`✅ Appended ${values.length} rows to ${sheetName}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Appended ${values.length} rows to ${sheetName} (cache cleared)`);
   } catch (error) {
     console.error('Failed to append sheet data:', error);
     throw error;
@@ -502,7 +519,10 @@ export async function deleteColumns(
       },
     });
 
-    console.log(`✅ Deleted ${columnCount} column(s) from index ${startIndex}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Deleted ${columnCount} column(s) from index ${startIndex} (cache cleared)`);
   } catch (error) {
     console.error('Failed to delete columns:', error);
     throw error;
@@ -543,7 +563,10 @@ export async function deleteRows(
       },
     });
 
-    console.log(`✅ Deleted ${rowCount} row(s) from index ${startIndex}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Deleted ${rowCount} row(s) from index ${startIndex} (cache cleared)`);
   } catch (error) {
     console.error('Failed to delete rows:', error);
     throw error;
@@ -576,7 +599,10 @@ export async function updateSheetCell(
       },
     });
 
-    console.log(`✅ Updated cell ${sheetName}!${cellAddress} with value: ${value}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Updated cell ${sheetName}!${cellAddress} with value: ${value} (cache cleared)`);
   } catch (error) {
     console.error(`Failed to update cell ${sheetName}!${cellAddress}:`, error);
     throw error;
@@ -606,7 +632,10 @@ export async function appendSheetRow(
       },
     });
 
-    console.log(`✅ Appended 1 row to ${sheetName}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Appended 1 row to ${sheetName} (cache cleared)`);
   } catch (error) {
     console.error(`Failed to append row to ${sheetName}:`, error);
     throw error;
@@ -638,7 +667,10 @@ export async function updateSheetRow(
       },
     });
 
-    console.log(`✅ Updated row ${rowNumber} in ${sheetName}`);
+    // 書き込み後、該当スプレッドシートのキャッシュをクリア
+    clearCacheForSpreadsheet(spreadsheetId);
+
+    console.log(`✅ Updated row ${rowNumber} in ${sheetName} (cache cleared)`);
   } catch (error) {
     console.error(`Failed to update row ${rowNumber} in ${sheetName}:`, error);
     throw error;

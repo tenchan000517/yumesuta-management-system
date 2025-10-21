@@ -21,7 +21,10 @@ import {
   Edit3,
 } from 'lucide-react';
 import type { ProcessDetail } from '@/types/yumemaga-process';
-import { generateContentOrganizationPrompt } from '@/data/content-organization-prompt-template';
+import {
+  generateContentOrganizationPrompt,
+  generateProfileSummaryPrompt,
+} from '@/data/content-organization-prompt-template';
 
 interface ProcessSidePanelProps {
   process: ProcessDetail | null;
@@ -59,6 +62,10 @@ export function ProcessSidePanel({
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [documentLink, setDocumentLink] = useState('');
   const [isSavingDocument, setIsSavingDocument] = useState(false);
+
+  // 人物概要作成用のstate
+  const [organizedInterview, setOrganizedInterview] = useState('');
+  const [copiedProfilePrompt, setCopiedProfilePrompt] = useState(false);
 
   // コマンド自動生成
   const { generatedCommand, outputPath } = useMemo(() => {
@@ -111,6 +118,19 @@ export function ProcessSidePanel({
     navigator.clipboard.writeText(generatedPrompt);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 2000);
+  };
+
+  // 人物概要作成用: プロンプト自動生成
+  const generatedProfilePrompt = useMemo(() => {
+    if (!organizedInterview) return '';
+    return generateProfileSummaryPrompt(organizedInterview);
+  }, [organizedInterview]);
+
+  // 人物概要作成用: プロンプトコピー
+  const handleCopyProfilePrompt = () => {
+    navigator.clipboard.writeText(generatedProfilePrompt);
+    setCopiedProfilePrompt(true);
+    setTimeout(() => setCopiedProfilePrompt(false), 2000);
   };
 
   // A-4工程用: Googleドキュメント新規作成
@@ -706,6 +726,79 @@ export function ProcessSidePanel({
                 <p className="text-xs text-blue-700 bg-blue-100 rounded p-2">
                   💡 保存すると、カテゴリフォルダ/録音データ/月号/ に自動的に移動されます
                 </p>
+              </div>
+            </section>
+          )}
+
+          {/* 人物概要作成ガイド（工程A-4など内容整理工程のみ表示） */}
+          {process.processNo.endsWith('-4') && process.processName.includes('内容整理') && (
+            <section>
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-purple-600" />
+                人物概要作成プロンプト生成
+              </h3>
+
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-3">
+                <p className="text-xs text-purple-900 font-semibold mb-2">
+                  📝 内容整理後の次のステップ
+                </p>
+                <p className="text-xs text-purple-800">
+                  整理したインタビュー内容をもとに、レジェンド/STARページ用の人物概要（キャッチコピー・リード文・プロフィール）を作成します。
+                </p>
+              </div>
+
+              {/* 整理済みインタビュー内容入力 */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  整理済みインタビュー内容
+                </label>
+                <textarea
+                  value={organizedInterview}
+                  onChange={(e) => setOrganizedInterview(e.target.value)}
+                  placeholder={'内容整理プロンプトで生成した、Q./A. 形式のインタビュー内容をここに貼り付けてください。\n\n例：\nQ. これまでのキャリアのスタートを教えてください。\n\nA. 工業高校から専門学校を経てソニーに入社しました...'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm resize-y min-h-[150px] font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  上の「内容整理プロンプト生成」で作成した整理済みの内容を貼り付けてください
+                </p>
+              </div>
+
+              {/* 生成されたプロンプト */}
+              {generatedProfilePrompt && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      生成されたプロンプト
+                    </label>
+                    <button
+                      onClick={handleCopyProfilePrompt}
+                      className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1 text-xs font-semibold"
+                    >
+                      <Copy className="w-3 h-3" />
+                      {copiedProfilePrompt ? 'コピー済み ✓' : 'コピー'}
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 max-h-64 overflow-y-auto">
+                    <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
+                      {generatedProfilePrompt}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-purple-600 mt-2">
+                    💡 このプロンプトをコピーして、Claude Codeに貼り付けてください
+                  </p>
+                </div>
+              )}
+
+              {/* 出力内容の説明 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-900 font-semibold mb-2">
+                  📋 生成される内容
+                </p>
+                <ul className="text-xs text-blue-800 space-y-1">
+                  <li>• キャッチコピー（20-30文字）</li>
+                  <li>• リード文（240-260文字）</li>
+                  <li>• プロフィール（190-210文字）</li>
+                </ul>
               </div>
             </section>
           )}
