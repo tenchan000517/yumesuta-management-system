@@ -67,6 +67,15 @@ export function ProcessSidePanel({
   const [organizedInterview, setOrganizedInterview] = useState('');
   const [copiedProfilePrompt, setCopiedProfilePrompt] = useState(false);
 
+  // B-3工程（アンケートフォーム作成）用のstate
+  const [previousForm, setPreviousForm] = useState<any>(null);
+  const [loadingPreviousForm, setLoadingPreviousForm] = useState(false);
+  const [createdFolder, setCreatedFolder] = useState<any>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [companyList, setCompanyList] = useState<string[]>([]);
+  const [pageList, setPageList] = useState<string[]>([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+
   // コマンド自動生成
   const { generatedCommand, outputPath } = useMemo(() => {
     if (!filePath) return { generatedCommand: '', outputPath: '' };
@@ -131,6 +140,155 @@ export function ProcessSidePanel({
     navigator.clipboard.writeText(generatedProfilePrompt);
     setCopiedProfilePrompt(true);
     setTimeout(() => setCopiedProfilePrompt(false), 2000);
+  };
+
+  // B-3工程用: 前月フォーム取得
+  const handleLoadPreviousForm = async () => {
+    if (!process?.processNo || !issue) return;
+
+    setLoadingPreviousForm(true);
+    try {
+      const res = await fetch(
+        `/api/yumemaga-v2/get-previous-form?processNo=${process.processNo}&issue=${encodeURIComponent(issue)}`
+      );
+      const data = await res.json();
+
+      if (data.success && data.previousForm) {
+        setPreviousForm(data.previousForm);
+      } else {
+        alert(data.message || '前月のフォームが見つかりませんでした');
+      }
+    } catch (error) {
+      console.error('前月フォーム取得エラー:', error);
+      alert('前月のフォーム取得に失敗しました');
+    } finally {
+      setLoadingPreviousForm(false);
+    }
+  };
+
+  // B-3工程用: フォルダ作成
+  const handleCreateFolder = async () => {
+    if (!process?.processNo || !issue) return;
+
+    setIsCreatingFolder(true);
+    try {
+      const res = await fetch('/api/yumemaga-v2/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          processNo: process.processNo,
+          issue: issue,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCreatedFolder(data.folder);
+        alert('✅ フォルダを作成しました！');
+      } else {
+        alert(`❌ フォルダ作成に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('フォルダ作成エラー:', error);
+      alert('❌ フォルダ作成に失敗しました');
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  // B-3工程用: 企業・ページリスト取得
+  const handleLoadLists = async () => {
+    setLoadingLists(true);
+    try {
+      const res = await fetch('/api/yumemaga-sheets?sheet=%E4%BC%81%E6%A5%AD%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC');
+      const data = await res.json();
+
+      if (data.success && data.data.rows.length > 1) {
+        const companies = data.data.rows.slice(1).map((row: any[]) => row[1]).filter(Boolean);
+        setCompanyList(companies);
+      }
+
+      // ページリストは固定（サンプル）
+      setPageList([
+        'P4: 表紙のインタビュー',
+        'P6: レジェンドインタビュー',
+        'P10: パートナー企業紹介',
+        'P22: 専門校紹介',
+        'P24 STAR（先輩インタビュー）',
+        '特になし',
+      ]);
+    } catch (error) {
+      console.error('リスト取得エラー:', error);
+      alert('リスト取得に失敗しました');
+    } finally {
+      setLoadingLists(false);
+    }
+  };
+
+  // B-3工程用: リストコピー
+  const handleCopyList = (type: 'companies' | 'pages') => {
+    const list = type === 'companies' ? companyList : pageList;
+    navigator.clipboard.writeText(list.join('\n'));
+    setCopiedList(type);
+    setTimeout(() => setCopiedList(null), 2000);
+  };
+
+  // B-3工程用: 指示文コピー
+  const handleCopyInstructions = () => {
+    const instructions = generateClaudeCodeInstructions();
+    navigator.clipboard.writeText(instructions);
+    setCopiedInstructions(true);
+    setTimeout(() => setCopiedInstructions(false), 2000);
+  };
+
+  // B-3工程用: Claude Code指示文生成
+  const generateClaudeCodeInstructions = () => {
+    return `# Google FormsのEntry ID抽出とsurvey-config.ts更新
+
+## 手順
+
+### 1. HTMLソースからEntry IDを抽出
+
+以下のHTMLソース内から、各質問のEntry IDを抽出してください：
+
+\`\`\`
+${htmlSource || '（HTMLソースを貼り付けてください）'}
+\`\`\`
+
+### 2. survey-config.tsを更新
+
+\`/mnt/c/yumesuta-survey/data/survey-config.ts\` を更新してください。
+
+新しい月号の設定を追加：
+
+\`\`\`typescript
+"${issue || '2025年12月号'}": {
+  formId: "YOUR_FORM_ID",
+  companies: [
+    ${companyList.map(c => `"${c}"`).join(',\n    ')}
+  ],
+  pages: [
+    ${pageList.map(p => `"${p}"`).join(',\n    ')}
+  ],
+  entryIds: {
+    grade: "entry.XXXXXXXXX",
+    department: "entry.XXXXXXXXX",
+    career: "entry.XXXXXXXXX",
+    impressivePage: "entry.XXXXXXXXX",
+    readability: "entry.XXXXXXXXX",
+    layout: "entry.XXXXXXXXX",
+    goodPoints: "entry.XXXXXXXXX",
+    priorKnowledge: "entry.XXXXXXXXX",
+    interestedCompanies: "entry.XXXXXXXXX",
+    wantToKnow: "entry.XXXXXXXXX",
+    improvements: "entry.XXXXXXXXX"
+  }
+}
+\`\`\`
+
+### 3. 確認
+
+\`npm run dev\` でローカル確認してください。`;
   };
 
   // A-4工程用: Googleドキュメント新規作成
@@ -801,6 +959,194 @@ export function ProcessSidePanel({
                 </ul>
               </div>
             </section>
+          )}
+
+          {/* B-3工程: アンケートフォーム作成ガイド */}
+          {process.processNo === 'B-3' && (
+            <>
+              {/* Step 1: フォルダ作成 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FolderOpen className="w-5 h-5 text-green-600" />
+                  Step 1: フォルダ作成
+                </h3>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                  <button
+                    onClick={handleCreateFolder}
+                    disabled={isCreatingFolder || createdFolder}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    {isCreatingFolder ? '作成中...' : createdFolder ? '作成済み ✓' : 'フォルダを作成'}
+                  </button>
+
+                  {createdFolder && (
+                    <div className="bg-white border border-green-300 rounded-lg p-3">
+                      <p className="text-xs text-green-900 font-semibold mb-2">
+                        作成されたフォルダ: {createdFolder.name}
+                      </p>
+                      <a
+                        href={createdFolder.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-semibold"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        フォルダを開く
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Step 2: info@yumesuta.comでログイン */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Step 2: info@yumesuta.comでログイン
+                </h3>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-900 mb-2">
+                    <strong>Google Formsの作成・編集には、info@yumesuta.comアカウントでログインしてください。</strong>
+                  </p>
+                  <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                    <li>ブラウザでGoogleにログイン</li>
+                    <li>アカウント: <code className="bg-blue-100 px-1 rounded">info@yumesuta.com</code></li>
+                    <li>このアカウントでログインした状態で次のステップに進む</li>
+                  </ol>
+                </div>
+              </section>
+
+              {/* Step 3: 前月フォームのリンク */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  Step 3: 前月フォームをコピー
+                </h3>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <button
+                    onClick={handleLoadPreviousForm}
+                    disabled={loadingPreviousForm}
+                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    {loadingPreviousForm ? '読み込み中...' : '前月フォームを取得'}
+                  </button>
+
+                  {previousForm && (
+                    <div className="space-y-2">
+                      <div className="bg-white border border-purple-300 rounded-lg p-3">
+                        <p className="text-xs text-purple-900 font-semibold mb-2">
+                          前月のフォームURL（コピペしてください）
+                        </p>
+                        <code className="block bg-gray-900 text-green-400 p-2 rounded font-mono text-xs break-all">
+                          {previousForm.webViewLink}
+                        </code>
+                      </div>
+                      <ol className="text-xs text-purple-800 space-y-1 list-decimal list-inside">
+                        <li>上記URLをコピーしてブラウザで開く</li>
+                        <li>フォームを開いたら、右上の「︙」→「コピーを作成」</li>
+                        <li>フォーム名を「{issue} 読者アンケート」に変更</li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Step 4: 企業・ページリストの更新 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-orange-600" />
+                  Step 4: 企業・ページリストの更新
+                </h3>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
+                  <button
+                    onClick={handleLoadLists}
+                    disabled={loadingLists}
+                    className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    {loadingLists ? '読み込み中...' : 'リストを取得'}
+                  </button>
+
+                  {companyList.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-orange-900 font-semibold">企業リスト（コピペしてください）</p>
+                        <button
+                          onClick={() => handleCopyList('companies')}
+                          className="px-2 py-1 bg-orange-600 text-white rounded text-xs flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                          {copiedList === 'companies' ? 'コピー済み ✓' : 'コピー'}
+                        </button>
+                      </div>
+                      <div className="bg-white border border-orange-300 rounded p-2 max-h-32 overflow-y-auto">
+                        <pre className="text-xs text-orange-800 whitespace-pre-wrap">
+                          {companyList.join('\n')}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+
+                  {pageList.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-orange-900 font-semibold">ページリスト（コピペしてください）</p>
+                        <button
+                          onClick={() => handleCopyList('pages')}
+                          className="px-2 py-1 bg-orange-600 text-white rounded text-xs flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                          {copiedList === 'pages' ? 'コピー済み ✓' : 'コピー'}
+                        </button>
+                      </div>
+                      <div className="bg-white border border-orange-300 rounded p-2 max-h-32 overflow-y-auto">
+                        <pre className="text-xs text-orange-800 whitespace-pre-wrap">
+                          {pageList.join('\n')}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-white border border-orange-300 rounded-lg p-3">
+                    <p className="text-xs text-orange-900 font-semibold mb-2">
+                      フォームの選択肢を更新:
+                    </p>
+                    <ol className="text-xs text-orange-800 space-y-1 list-decimal list-inside">
+                      <li>Q4「印象に残ったページ」→ ページリストをコピペして更新</li>
+                      <li>Q9「興味がある企業」→ 企業リストをコピペして更新</li>
+                    </ol>
+                  </div>
+                </div>
+              </section>
+
+              {/* Step 5: フォームを移動 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-pink-600" />
+                  Step 5: フォームを移動
+                </h3>
+
+                <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
+                  <p className="text-sm text-pink-900 font-semibold mb-2">
+                    作成したフォームを、Step 1で作成したフォルダに移動してください
+                  </p>
+                  <ol className="text-xs text-pink-800 space-y-1 list-decimal list-inside">
+                    <li>Google Formsの編集画面で、右上の「︙」→「移動」</li>
+                    <li>Step 1で作成したフォルダを選択</li>
+                    <li>「移動」ボタンをクリック</li>
+                  </ol>
+                  <p className="text-xs text-pink-700 mt-2">
+                    💡 これで、フォームが所定のフォルダに整理されます
+                  </p>
+                </div>
+              </section>
+            </>
           )}
 
           {/* 成果物 */}
