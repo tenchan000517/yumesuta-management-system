@@ -35,6 +35,7 @@ interface CategoryManagementSectionProps {
   onToggleExpand: (categoryId: string) => void;
   onUpdateActualDate?: (processNo: string, date: string) => void;
   onUpdatePlannedDate?: (processNo: string, date: string) => void;
+  onProcessDetail?: (processNo: string) => void; // Phase 4: 工程詳細サイドパネルを開く
 }
 
 export function CategoryManagementSection({
@@ -49,7 +50,8 @@ export function CategoryManagementSection({
   onUpdateConfirmation,
   onToggleExpand,
   onUpdateActualDate,
-  onUpdatePlannedDate
+  onUpdatePlannedDate,
+  onProcessDetail
 }: CategoryManagementSectionProps) {
   const [showCategoryCards, setShowCategoryCards] = useState(false);
   const [editingActualDates, setEditingActualDates] = useState<Record<string, string>>({});
@@ -468,7 +470,18 @@ export function CategoryManagementSection({
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1">
-                              <p className="font-semibold text-sm text-gray-900">{cleanProcessName || process.name}</p>
+                              <div className="flex items-center justify-between">
+                                <p className="font-semibold text-sm text-gray-900">{cleanProcessName || process.name}</p>
+                                {/* 詳細ボタン */}
+                                {onProcessDetail && (
+                                  <button
+                                    onClick={() => onProcessDetail(process.id)}
+                                    className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold hover:bg-blue-200 transition-colors"
+                                  >
+                                    詳細
+                                  </button>
+                                )}
+                              </div>
                               {/* Phase 2: 準備OK・遅延バッジ */}
                               <div className="flex gap-2 mt-2">
                                 {isReady && (

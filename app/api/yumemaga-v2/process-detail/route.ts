@@ -316,6 +316,13 @@ function getGuides(processNo: string) {
     return [
       {
         id: `${processNo}-g1`,
+        label: 'faster-whisperセットアップガイド',
+        type: 'internal' as const,
+        url: '/guides/faster-whisper-setup',
+        icon: '🔧',
+      },
+      {
+        id: `${processNo}-g2`,
         label: 'faster-whisper GitHub',
         type: 'external' as const,
         url: 'https://github.com/SYSTRAN/faster-whisper',

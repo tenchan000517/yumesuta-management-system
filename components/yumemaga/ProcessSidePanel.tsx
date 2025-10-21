@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   X,
   ExternalLink,
@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Play,
   FileCode,
+  Copy,
 } from 'lucide-react';
 import type { ProcessDetail } from '@/types/yumemaga-process';
 
@@ -27,6 +28,7 @@ interface ProcessSidePanelProps {
   onChecklistChange?: (processNo: string, checkId: string, checked: boolean) => void;
   onCompleteProcess?: (processNo: string) => void;
   onUploadDeliverable?: (processNo: string, file: File) => void;
+  onUploadRequiredData?: (processNo: string, dataId: string, file: File) => void;
 }
 
 export function ProcessSidePanel({
@@ -36,9 +38,37 @@ export function ProcessSidePanel({
   onChecklistChange,
   onCompleteProcess,
   onUploadDeliverable,
+  onUploadRequiredData,
 }: ProcessSidePanelProps) {
   const [showTranscriptionGuide, setShowTranscriptionGuide] = useState(false);
+  const [uploadingDataId, setUploadingDataId] = useState<string | null>(null);
+  const [filePath, setFilePath] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const requiredDataFileInputRef = useRef<HTMLInputElement>(null);
+
+  // コマンド自動生成
+  const { generatedCommand, outputPath } = useMemo(() => {
+    if (!filePath) return { generatedCommand: '', outputPath: '' };
+
+    // パスから親ディレクトリを抽出
+    const isWindows = filePath.includes('\\');
+    const separator = isWindows ? '\\' : '/';
+    const lastSeparatorIndex = filePath.lastIndexOf(separator);
+    const directory = lastSeparatorIndex > 0 ? filePath.substring(0, lastSeparatorIndex) : '';
+
+    // ファイル名から拡張子を除去してoutputPathを生成
+    const fileName = filePath.substring(lastSeparatorIndex + 1);
+    const fileNameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+    const output = directory ? `${directory}${separator}${fileNameWithoutExt}.txt` : `${fileNameWithoutExt}.txt`;
+
+    const command = `faster-whisper "${filePath}" --model medium --language ja --output_dir "${directory}" --output_format txt`;
+
+    return { generatedCommand: command, outputPath: output };
+  }, [filePath]);
+
+  const handleCopyCommand = () => {
+    navigator.clipboard.writeText(generatedCommand);
+  };
 
   if (!isOpen || !process) {
     return null;
@@ -63,6 +93,23 @@ export function ProcessSidePanel({
     }
   };
 
+  const handleRequiredDataFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && onUploadRequiredData && uploadingDataId) {
+      onUploadRequiredData(process.processNo, uploadingDataId, file);
+      setUploadingDataId(null);
+    }
+    // リセット
+    if (requiredDataFileInputRef.current) {
+      requiredDataFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRequiredDataUploadClick = (dataId: string) => {
+    setUploadingDataId(dataId);
+    requiredDataFileInputRef.current?.click();
+  };
+
   const getDataTypeIcon = (type: string) => {
     switch (type) {
       case 'audio':
@@ -81,12 +128,6 @@ export function ProcessSidePanel({
 
   return (
     <>
-      {/* オーバーレイ */}
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
-      ></div>
-
       {/* サイドパネル */}
       <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 overflow-y-auto">
         <div className="p-6 space-y-6">
@@ -206,6 +247,13 @@ export function ProcessSidePanel({
           {process.requiredData && process.requiredData.length > 0 && (
             <section>
               <h3 className="text-lg font-bold text-gray-900 mb-3">必要データ</h3>
+              {/* 必要データ用のファイル入力（hidden） */}
+              <input
+                ref={requiredDataFileInputRef}
+                type="file"
+                onChange={handleRequiredDataFileUpload}
+                className="hidden"
+              />
               <div className="space-y-3">
                 {process.requiredData.map((data) => (
                   <div
@@ -257,8 +305,19 @@ export function ProcessSidePanel({
                             </span>
                           )}
                         </div>
-                        {data.driveUrl && (
-                          <div className="flex gap-2 mt-3">
+                        <div className="flex gap-2 mt-3">
+                          {/* アップロードボタン（pending/none の場合表示） */}
+                          {(data.status === 'pending' || data.status === 'none') && onUploadRequiredData && (
+                            <button
+                              onClick={() => handleRequiredDataUploadClick(data.id)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                            >
+                              <Upload className="w-4 h-4" />
+                              アップロード
+                            </button>
+                          )}
+                          {/* Driveで開く・ダウンロードボタン（submitted の場合表示） */}
+                          {data.driveUrl && (
                             <a
                               href={data.driveUrl}
                               target="_blank"
@@ -268,18 +327,18 @@ export function ProcessSidePanel({
                               <FolderOpen className="w-4 h-4" />
                               Driveで開く
                             </a>
-                            {data.driveFileId && (
-                              <a
-                                href={`https://drive.google.com/uc?export=download&id=${data.driveFileId}`}
-                                download
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
-                              >
-                                <Download className="w-4 h-4" />
-                                ダウンロード
-                              </a>
-                            )}
-                          </div>
-                        )}
+                          )}
+                          {data.driveFileId && (
+                            <a
+                              href={`https://drive.google.com/uc?export=download&id=${data.driveFileId}`}
+                              download
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
+                            >
+                              <Download className="w-4 h-4" />
+                              ダウンロード
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -293,41 +352,51 @@ export function ProcessSidePanel({
             <section>
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <FileCode className="w-5 h-5 text-purple-600" />
-                faster-whisper実行ガイド
+                faster-whisper実行
               </h3>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <button
-                  onClick={() => setShowTranscriptionGuide(!showTranscriptionGuide)}
-                  className="w-full text-left flex items-center justify-between"
-                >
-                  <span className="text-sm font-semibold text-purple-900">
-                    {showTranscriptionGuide ? '▼ 手順を閉じる' : '▶ 詳細な手順を表示'}
-                  </span>
-                </button>
-                {showTranscriptionGuide && (
-                  <div className="mt-4 space-y-3 text-sm text-gray-700">
-                    <div className="bg-white rounded-lg p-3 border border-purple-200">
-                      <p className="font-semibold text-purple-900 mb-2">1. mp3ファイルをダウンロード</p>
-                      <p>上記「必要データ」セクションから録音データをダウンロードしてください。</p>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 border border-purple-200">
-                      <p className="font-semibold text-purple-900 mb-2">2. faster-whisperを実行</p>
-                      <p className="mb-2">ダウンロードしたmp3ファイルがあるフォルダで、以下のコマンドを実行:</p>
-                      <code className="block bg-gray-900 text-green-400 p-3 rounded text-xs font-mono">
-                        python transcribe.py your_audio.mp3
-                      </code>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 border border-purple-200">
-                      <p className="font-semibold text-purple-900 mb-2">3. 文字起こしテキストを確認</p>
-                      <p>生成された <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">your_audio_transcript.txt</code> を確認してください。</p>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 border border-purple-200">
-                      <p className="font-semibold text-purple-900 mb-2">4. テキストファイルをアップロード</p>
-                      <p>下記「成果物」セクションからテキストファイルをアップロードしてください。</p>
-                    </div>
-                  </div>
-                )}
+
+              {/* パス入力 */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ダウンロードしたmp3ファイルのパスを貼り付け
+                </label>
+                <input
+                  type="text"
+                  value={filePath}
+                  onChange={(e) => setFilePath(e.target.value)}
+                  placeholder="例: C:\Users\YourName\Downloads\interview.mp3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-mono"
+                />
               </div>
+
+              {/* 生成されたコマンド */}
+              {generatedCommand && (
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    実行コマンド
+                  </label>
+                  <div className="flex gap-2">
+                    <code className="flex-1 bg-gray-900 text-green-400 p-3 rounded-lg text-xs font-mono overflow-x-auto whitespace-nowrap">
+                      {generatedCommand}
+                    </code>
+                    <button
+                      onClick={handleCopyCommand}
+                      className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1"
+                      title="コピー"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 出力先パス */}
+              {outputPath && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <p className="text-xs text-purple-900 font-medium mb-1">生成されるファイル:</p>
+                  <code className="text-xs text-purple-800 font-mono">{outputPath}</code>
+                </div>
+              )}
             </section>
           )}
 

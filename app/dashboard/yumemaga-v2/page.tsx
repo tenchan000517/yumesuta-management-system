@@ -20,6 +20,8 @@ import { DataSubmissionSection } from '@/components/data-submission/DataSubmissi
 import { OverallProgressSection } from '@/components/overall-progress/OverallProgressSection';
 import { CompanyManagementSection } from '@/components/company-management/CompanyManagementSection';
 import { CompanyPageProductionSection } from '@/components/company-page-production/CompanyPageProductionSection';
+import { ProcessSidePanel } from '@/components/yumemaga/ProcessSidePanel';
+import type { ProcessDetail } from '@/types/yumemaga-process';
 
 export default function YumeMagaV2Page() {
   const [publishDate, setPublishDate] = useState('2025-11-08');
@@ -40,6 +42,11 @@ export default function YumeMagaV2Page() {
   const [companyPageProduction, setCompanyPageProduction] = useState<any>(null); // 企業別ページ制作進捗
   const [loading, setLoading] = useState(false);
   const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null);
+
+  // ProcessSidePanel用の状態
+  const [selectedProcess, setSelectedProcess] = useState<ProcessDetail | null>(null);
+  const [isProcessPanelOpen, setIsProcessPanelOpen] = useState(false);
+  const [loadingProcess, setLoadingProcess] = useState(false);
 
   // データ取得関数
   const fetchAllData = async () => {
@@ -339,6 +346,183 @@ export default function YumeMagaV2Page() {
     } catch (error) {
       console.error('確認ステータス更新エラー:', error);
       alert('更新に失敗しました');
+    }
+  };
+
+  // Phase 4: 工程詳細サイドパネル関連ハンドラー
+  const handleProcessDetail = async (processNo: string) => {
+    setLoadingProcess(true);
+    try {
+      const res = await fetch(
+        `/api/yumemaga-v2/process-detail?issue=${encodeURIComponent(selectedIssue)}&processNo=${processNo}`
+      );
+      const data = await res.json();
+
+      if (data.success) {
+        setSelectedProcess(data.process);
+        setIsProcessPanelOpen(true);
+      } else {
+        alert(`工程詳細の取得に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('工程詳細取得エラー:', error);
+      alert('工程詳細の取得に失敗しました');
+    } finally {
+      setLoadingProcess(false);
+    }
+  };
+
+  const handleCloseProcessPanel = () => {
+    setIsProcessPanelOpen(false);
+    setSelectedProcess(null);
+  };
+
+  const handleChecklistChange = async (processNo: string, checkId: string, checked: boolean) => {
+    // TODO: チェックリスト更新API実装後に追加
+    console.log('チェックリスト更新:', processNo, checkId, checked);
+
+    // ローカル状態を更新（楽観的更新）
+    if (selectedProcess) {
+      const updatedChecklist = selectedProcess.checklist.map(item =>
+        item.id === checkId ? { ...item, checked } : item
+      );
+      setSelectedProcess({
+        ...selectedProcess,
+        checklist: updatedChecklist,
+      });
+    }
+  };
+
+  const handleCompleteProcess = async (processNo: string) => {
+    try {
+      // 今日の日付を取得（M/D形式）
+      const today = new Date();
+      const todayDate = `${today.getMonth() + 1}/${today.getDate()}`;
+
+      // 実績日更新API（既存）を使用
+      const res = await fetch('/api/yumemaga-v2/actual-date', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue: selectedIssue,
+          processNo,
+          actualDate: todayDate,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert('工程を完了にしました');
+        // サイドパネルを閉じる
+        handleCloseProcessPanel();
+        // 全データ再取得
+        await fetchAllData();
+      } else {
+        alert(`更新に失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('工程完了エラー:', error);
+      alert('工程完了に失敗しました');
+    }
+  };
+
+  const handleUploadDeliverable = async (processNo: string, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('processNo', processNo);
+      formData.append('issue', selectedIssue);
+
+      const res = await fetch('/api/yumemaga-v2/deliverable-upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(`ファイルをアップロードしました: ${data.file.name}`);
+        // 工程詳細を再取得
+        await handleProcessDetail(processNo);
+      } else {
+        alert(`アップロードに失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('成果物アップロードエラー:', error);
+      alert('アップロードに失敗しました');
+    }
+  };
+
+  const handleUploadRequiredData = async (processNo: string, dataId: string, file: File) => {
+    try {
+      // processNoからカテゴリIDを抽出（例: "A-3" → "A"）
+      const categoryId = processNo.split('-')[0];
+
+      // dataIdからデータ種別を推測（モックデータの場合、dataIdに情報が含まれている想定）
+      // 実際のデータ種別マッピング: audio → recording, document → planning/content, image → photo
+      let dataType = 'recording'; // デフォルト
+      if (dataId.includes('audio') || dataId.includes('録音')) {
+        dataType = 'recording';
+      } else if (dataId.includes('photo') || dataId.includes('写真') || dataId.includes('画像')) {
+        dataType = 'photo';
+      } else if (dataId.includes('planning') || dataId.includes('企画')) {
+        dataType = 'planning';
+      } else if (dataId.includes('content') || dataId.includes('内容整理')) {
+        dataType = 'content';
+      }
+
+      const formData = new FormData();
+      formData.append('mode', 'category');
+      formData.append('files', file);
+      formData.append('categoryId', categoryId);
+      formData.append('dataType', dataType);
+
+      // 月号を "2025_11" 形式に変換
+      const issue = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+        const paddedMonth = month.padStart(2, '0');
+        return `${year}_${paddedMonth}`;
+      });
+      formData.append('issue', issue);
+
+      // データ提出APIを使用
+      const res = await fetch('/api/yumemaga-v2/data-submission/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(`ファイルをアップロードしました: ${data.uploadedFiles[0]?.name || file.name}`);
+
+        // 工程完了API呼び出し
+        try {
+          const completeRes = await fetch('/api/yumemaga-v2/data-submission/complete-process', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              issue: selectedIssue,
+              categoryId: categoryId,
+              dataType: dataType,
+            }),
+          });
+          const completeData = await completeRes.json();
+
+          if (completeData.success && completeData.completedProcesses.length > 0) {
+            alert(`✅ ${completeData.message}\n工程が自動完了しました`);
+          }
+        } catch (error) {
+          console.error('工程完了API呼び出しエラー:', error);
+        }
+
+        // 工程詳細を再取得
+        await handleProcessDetail(processNo);
+        // 全データ再取得
+        await fetchAllData();
+      } else {
+        alert(`アップロードに失敗しました: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('必要データアップロードエラー:', error);
+      alert('アップロードに失敗しました');
     }
   };
 
@@ -745,6 +929,7 @@ export default function YumeMagaV2Page() {
           }
           onUpdateActualDate={handleUpdateActualDate}
           onUpdatePlannedDate={handleUpdatePlannedDate}
+          onProcessDetail={handleProcessDetail}
         />
 
         {/* Phase 3: Zセクション（全体進捗管理） */}
@@ -818,6 +1003,17 @@ export default function YumeMagaV2Page() {
           </div>
         </div>
       </div>
+
+      {/* ProcessSidePanel */}
+      <ProcessSidePanel
+        process={selectedProcess}
+        isOpen={isProcessPanelOpen}
+        onClose={handleCloseProcessPanel}
+        onChecklistChange={handleChecklistChange}
+        onCompleteProcess={handleCompleteProcess}
+        onUploadDeliverable={handleUploadDeliverable}
+        onUploadRequiredData={handleUploadRequiredData}
+      />
     </div>
   );
 }
