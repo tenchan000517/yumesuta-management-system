@@ -43,6 +43,9 @@ export function ProcessSidePanel({
   const [showTranscriptionGuide, setShowTranscriptionGuide] = useState(false);
   const [uploadingDataId, setUploadingDataId] = useState<string | null>(null);
   const [filePath, setFilePath] = useState('');
+  const [copiedVenvCommand, setCopiedVenvCommand] = useState(false);
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
+  const [copiedCheckCommand, setCopiedCheckCommand] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const requiredDataFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,13 +67,26 @@ export function ProcessSidePanel({
     const fileNameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
     const output = directory ? `${directory}${separator}${fileNameWithoutExt}.txt` : `${fileNameWithoutExt}.txt`;
 
-    const command = `faster-whisper "${cleanPath}" --model medium --language ja --output_dir "${directory}" --output_format txt`;
+    // Pythonスクリプトを実行するコマンドを生成
+    const command = `python ~/transcribe.py "${cleanPath}"`;
 
     return { generatedCommand: command, outputPath: output };
   }, [filePath]);
 
   const handleCopyCommand = () => {
     navigator.clipboard.writeText(generatedCommand);
+  };
+
+  const handleCopyVenvCommand = () => {
+    navigator.clipboard.writeText('cd ~\nsource whisper-env/Scripts/activate');
+    setCopiedVenvCommand(true);
+    setTimeout(() => setCopiedVenvCommand(false), 2000);
+  };
+
+  const handleCopyCheckCommand = () => {
+    navigator.clipboard.writeText('pip show faster-whisper');
+    setCopiedCheckCommand(true);
+    setTimeout(() => setCopiedCheckCommand(false), 2000);
   };
 
   if (!isOpen || !process) {
@@ -350,13 +366,109 @@ export function ProcessSidePanel({
             </section>
           )}
 
-          {/* faster-whisper実行ガイド（工程A-3など文字起こし工程のみ表示） */}
+          {/* 文字起こし実行ガイド（工程A-3など文字起こし工程のみ表示） */}
           {process.processNo.endsWith('-3') && process.processName.includes('文字起こし') && (
             <section>
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <FileCode className="w-5 h-5 text-purple-600" />
-                faster-whisper実行
+                文字起こし実行（transcribe.py）
               </h3>
+
+              {/* 初めての方へ（展開型） */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg mb-3">
+                <button
+                  onClick={() => setShowSetupGuide(!showSetupGuide)}
+                  className="w-full p-3 text-left flex items-center justify-between hover:bg-blue-100 transition-colors"
+                >
+                  <span className="text-sm font-semibold text-blue-900">
+                    📘 初めての方へ（セットアップが必要です）
+                  </span>
+                  <span className="text-blue-600">
+                    {showSetupGuide ? '▼' : '▶'}
+                  </span>
+                </button>
+
+                {showSetupGuide && (
+                  <div className="p-3 pt-0 space-y-3">
+                    {/* セットアップガイドへのリンク */}
+                    <div className="bg-white border border-blue-300 rounded-lg p-3">
+                      <p className="text-xs text-blue-900 font-semibold mb-2">
+                        まだセットアップが完了していない方
+                      </p>
+                      <p className="text-xs text-blue-800 mb-2">
+                        以下の2つが必要です：
+                      </p>
+                      <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside mb-3">
+                        <li>faster-whisperのインストール（仮想環境内）</li>
+                        <li>transcribe.pyスクリプトの作成</li>
+                      </ul>
+                      <a
+                        href="/guides/faster-whisper-setup"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        セットアップガイドを開く
+                      </a>
+                    </div>
+
+                    {/* インストール確認 */}
+                    <div className="bg-white border border-blue-300 rounded-lg p-3">
+                      <p className="text-xs text-blue-900 font-semibold mb-2">
+                        インストール確認コマンド
+                      </p>
+                      <p className="text-xs text-blue-800 mb-2">
+                        以下のコマンドで faster-whisper がインストールされているか確認できます：
+                      </p>
+                      <div className="relative">
+                        <div className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs">
+                          pip show faster-whisper
+                        </div>
+                        <button
+                          onClick={handleCopyCheckCommand}
+                          className="absolute top-1 right-1 p-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center gap-1"
+                          title="コピー"
+                        >
+                          <Copy className="w-3 h-3" />
+                          {copiedCheckCommand ? '✓' : ''}
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-700 mt-2">
+                        ✓ インストール済みの場合：バージョン情報が表示されます<br />
+                        ✗ 未インストールの場合：WARNING が表示されます
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 実行前の準備 */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                <p className="text-sm font-semibold text-yellow-900 mb-2">
+                  ⚠️ 実行前の準備
+                </p>
+                <p className="text-xs text-yellow-800 mb-2">
+                  <strong>VSCodeのターミナル</strong>で以下のコマンドを実行し、仮想環境を有効化してください：
+                </p>
+                <div className="relative mb-2">
+                  <div className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs">
+                    cd ~<br />
+                    source whisper-env/Scripts/activate
+                  </div>
+                  <button
+                    onClick={handleCopyVenvCommand}
+                    className="absolute top-1 right-1 p-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center gap-1"
+                    title="コピー"
+                  >
+                    <Copy className="w-3 h-3" />
+                    {copiedVenvCommand ? '✓' : ''}
+                  </button>
+                </div>
+                <p className="text-xs text-yellow-800">
+                  ✓ プロンプトに <code className="bg-white px-1 py-0.5 rounded">(whisper-env)</code> が表示されればOK
+                </p>
+              </div>
 
               {/* パス入力 */}
               <div className="mb-3">
