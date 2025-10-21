@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
+import { listFilesInFolder, ensureDirectory } from '@/lib/google-drive';
 import type { ProcessDetail } from '@/types/yumemaga-process';
 
 /**
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
       status: determineStatus(processRow[4], processRow[6]),
       delayDays: calculateDelayDays(processRow[4], processRow[6]),
       checklist: getProcessChecklist(processNo),   // チェックリスト（モックデータ）
-      requiredData: getRequiredData(processNo, issue, categoryId),     // 必要データ（モックデータ）
+      requiredData: await getRequiredData(spreadsheetId, processNo, issue, categoryId),     // 必要データ（Google Drive連携）
       deliverables: getDeliverables(processNo),    // 成果物（モックデータ）
       guides: getGuides(processNo),                // ガイドリンク（モックデータ）
     };
@@ -198,26 +199,96 @@ function getProcessChecklist(processNo: string) {
   return [];
 }
 
-// 必要データ取得（モックデータ + Google Drive連携予定）
-function getRequiredData(processNo: string, issue: string, categoryId: string) {
-  if (processNo.endsWith('-3')) {
-    // 文字起こし工程の必要データ
-    return [
-      {
+// 必要データ取得（Google Drive連携）
+async function getRequiredData(
+  spreadsheetId: string,
+  processNo: string,
+  issue: string,
+  categoryId: string
+) {
+  // -2（データ提出）と-3（文字起こし）のみ対応
+  if (!processNo.endsWith('-2') && !processNo.endsWith('-3')) {
+    return []; // データ提出・文字起こし工程以外は空
+  }
+
+  try {
+    // 1. カテゴリマスターからDriveフォルダIDを取得
+    const categoryMaster = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:J100');
+    const categoryRow = categoryMaster.slice(1).find(row => row[0] === categoryId);
+
+    if (!categoryRow || !categoryRow[9]) {
+      // DriveフォルダIDが見つからない場合はpendingで返す
+      const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
+      return [{
         id: `${processNo}-d1`,
         type: 'audio' as const,
-        name: '録音データ（前工程から）',
-        fileName: 'interview_20251001.mp3',
-        fileSize: '43.2 MB',
-        deadline: '9/28',
-        status: 'submitted' as const,
-        driveUrl: 'https://drive.google.com/drive/folders/dummy',
-        driveFileId: 'dummy-file-id', // 実際のファイルIDに置き換え
+        name: dataName,
+        status: 'pending' as const,
         optional: false,
-      },
-    ];
+      }];
+    }
+
+    const driveFolderId = categoryRow[9]; // J列
+
+    // 2. 月号フォーマット変換: "2025年11月号" → "2025_11"
+    const issueFormatted = issue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+      const paddedMonth = month.padStart(2, '0');
+      return `${year}_${paddedMonth}`;
+    });
+
+    // 3. フォルダパスを解決（存在しなければ作成）
+    const targetFolderId = await ensureDirectory(driveFolderId, ['録音データ', issueFormatted]);
+
+    // 4. フォルダ内のmp3ファイルを全て取得
+    const files = await listFilesInFolder(targetFolderId);
+    const mp3Files = files.filter(file =>
+      file.mimeType === 'audio/mpeg' ||
+      file.name?.toLowerCase().endsWith('.mp3')
+    );
+
+    // 5. ファイルがない場合はpendingで返す
+    const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
+
+    if (mp3Files.length === 0) {
+      return [{
+        id: `${processNo}-d1`,
+        type: 'audio' as const,
+        name: dataName,
+        status: 'pending' as const,
+        optional: false,
+      }];
+    }
+
+    // 6. 各ファイルをRequiredDataItemに変換（複数対応）
+    return mp3Files.map((file, index) => {
+      const fileSizeBytes = parseInt(file.size || '0', 10);
+      const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(1);
+
+      return {
+        id: `${processNo}-d1-${index + 1}`,
+        type: 'audio' as const,
+        name: dataName,
+        fileName: file.name || 'unknown.mp3',
+        fileSize: `${fileSizeMB} MB`,
+        status: 'submitted' as const, // ファイルが存在するのでsubmitted
+        driveUrl: file.webViewLink || undefined,
+        driveFileId: file.id || undefined,
+        optional: false,
+      };
+    });
+
+  } catch (error) {
+    console.error('録音データ取得エラー:', error);
+    // エラー時はpendingで返す
+    const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
+    return [{
+      id: `${processNo}-d1`,
+      type: 'audio' as const,
+      name: dataName,
+      status: 'pending' as const,
+      optional: false,
+    }];
   }
-  return [];
 }
 
 // 成果物取得（モックデータ + Google Drive連携予定）
