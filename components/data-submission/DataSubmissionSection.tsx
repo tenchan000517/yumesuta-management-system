@@ -92,6 +92,8 @@ export function DataSubmissionSection({
   useEffect(() => {
     // ローディング中は重複リクエストを防止
     if (loadingSubmission) return;
+    // selectedIssueが空の場合はスキップ
+    if (!selectedIssue) return;
 
     const timer = setTimeout(() => {
       const fetchSubmissionStatus = async () => {

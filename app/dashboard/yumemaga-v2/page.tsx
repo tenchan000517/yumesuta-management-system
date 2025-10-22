@@ -24,8 +24,8 @@ import { ProcessSidePanel } from '@/components/yumemaga/ProcessSidePanel';
 import type { ProcessDetail } from '@/types/yumemaga-process';
 
 export default function YumeMagaV2Page() {
-  const [publishDate, setPublishDate] = useState('2025-11-08');
-  const [selectedIssue, setSelectedIssue] = useState('2025年11月号');
+  const [publishDate, setPublishDate] = useState('');
+  const [selectedIssue, setSelectedIssue] = useState('');
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('A');
   const [confirmationStatus, setConfirmationStatus] = useState<Record<string, string>>({});
@@ -34,6 +34,7 @@ export default function YumeMagaV2Page() {
   const [issues, setIssues] = useState<Array<{ issue: string; isNew: boolean }>>([]);
   const [summary, setSummary] = useState({ completed: 0, inProgress: 0, notStarted: 0, delayed: 0 });
   const [nextMonthProcesses, setNextMonthProcesses] = useState<any[]>([]);
+  const [nextMonthIssue, setNextMonthIssue] = useState('');
   const [categories, setCategories] = useState<any[]>([]);
   const [categoryMetadata, setCategoryMetadata] = useState<any[]>([]); // Phase 1: カテゴリマスター
   const [readyProcesses, setReadyProcesses] = useState<string[]>([]); // Phase 2: 準備OK工程
@@ -49,13 +50,14 @@ export default function YumeMagaV2Page() {
   const [loadingProcess, setLoadingProcess] = useState(false);
 
   // データ取得関数
-  const fetchAllData = async () => {
-    if (!selectedIssue) return;
+  const fetchAllData = async (issueToFetch?: string) => {
+    const issue = issueToFetch || selectedIssue;
+    if (!issue) return;
 
     setLoading(true);
     try {
       // 工程データ取得でサマリーも取得
-      const processesRes = await fetch(`/api/yumemaga-v2/processes?issue=${encodeURIComponent(selectedIssue)}`);
+      const processesRes = await fetch(`/api/yumemaga-v2/processes?issue=${encodeURIComponent(issue)}`);
       const processesData = await processesRes.json();
       if (processesData.success) {
         setSummary({
@@ -67,7 +69,7 @@ export default function YumeMagaV2Page() {
       }
 
       // カテゴリ別進捗取得
-      const progressRes = await fetch(`/api/yumemaga-v2/progress?issue=${encodeURIComponent(selectedIssue)}`);
+      const progressRes = await fetch(`/api/yumemaga-v2/progress?issue=${encodeURIComponent(issue)}`);
       const progressData = await progressRes.json();
       if (progressData.success) {
         const newConfirmationStatus: Record<string, string> = {};
@@ -117,21 +119,22 @@ export default function YumeMagaV2Page() {
         setConfirmationStatus(newConfirmationStatus);
       }
 
-      // 次月号準備データ取得
-      const nextMonthRes = await fetch(`/api/yumemaga-v2/next-month?currentIssue=${encodeURIComponent(selectedIssue)}`);
+      // 準備フェーズデータ取得（選択中の号の準備フェーズ）
+      const nextMonthRes = await fetch(`/api/yumemaga-v2/next-month?issue=${encodeURIComponent(issue)}`);
       const nextMonthData = await nextMonthRes.json();
       if (nextMonthData.success) {
+        setNextMonthIssue(nextMonthData.issue);
         setNextMonthProcesses(nextMonthData.processes.map((p: any) => ({
           processNo: p.processNo,
           name: p.name,
-          plannedDate: p.plannedDate || '-', // ガントから取得
-          actualDate: '',
-          status: 'not_started' as const,
+          plannedDate: p.plannedDate || '-',
+          actualDate: p.actualDate || '',
+          status: p.actualDate ? 'completed' : 'not_started' as const,
         })));
       }
 
       // Phase 2: 準備OK・遅延工程の取得
-      const readyRes = await fetch(`/api/yumemaga-v2/ready-processes?issue=${encodeURIComponent(selectedIssue)}`);
+      const readyRes = await fetch(`/api/yumemaga-v2/ready-processes?issue=${encodeURIComponent(issue)}`);
       const readyData = await readyRes.json();
       if (readyData.success) {
         setReadyProcesses(readyData.readyProcesses.map((p: any) => p.processNo));
@@ -144,14 +147,14 @@ export default function YumeMagaV2Page() {
       }
 
       // 企業別工程データ取得
-      const companiesRes = await fetch(`/api/yumemaga-v2/company-processes?issue=${encodeURIComponent(selectedIssue)}`);
+      const companiesRes = await fetch(`/api/yumemaga-v2/company-processes?issue=${encodeURIComponent(issue)}`);
       const companiesData = await companiesRes.json();
       if (companiesData.success) {
         setCompanies(companiesData.companies || []);
       }
 
       // 企業別ページ制作進捗取得
-      const productionRes = await fetch(`/api/yumemaga-v2/company-page-production?issue=${encodeURIComponent(selectedIssue)}`);
+      const productionRes = await fetch(`/api/yumemaga-v2/company-page-production?issue=${encodeURIComponent(issue)}`);
       const productionData = await productionRes.json();
       if (productionData.success) {
         setCompanyPageProduction(productionData);
@@ -242,6 +245,37 @@ export default function YumeMagaV2Page() {
     };
     fetchAvailableIssues();
   }, []);
+
+  // issues取得後、selectedIssueが空の場合のみ最新号を自動選択
+  useEffect(() => {
+    if (issues.length > 0 && !selectedIssue) {
+      setSelectedIssue(issues[0].issue);
+    }
+  }, [issues, selectedIssue]);
+
+  // issues取得後、publishDateが空の場合のみ次号の発行日を自動設定
+  useEffect(() => {
+    if (issues.length > 0 && !publishDate) {
+      const latestIssue = issues[0].issue;
+      const match = latestIssue.match(/(\d+)年(\d+)月号/);
+      if (match) {
+        const year = parseInt(match[1]);
+        const month = parseInt(match[2]);
+
+        let nextYear = year;
+        let nextMonth = month + 1;
+
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear += 1;
+        }
+
+        // 発行日は8日固定（必要に応じて変更可能）
+        const nextPublishDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-08`;
+        setPublishDate(nextPublishDate);
+      }
+    }
+  }, [issues, publishDate]);
 
   // 初回データ取得
   useEffect(() => {
@@ -680,8 +714,52 @@ export default function YumeMagaV2Page() {
     },
   ];
 
-  const handleGenerateSchedule = () => {
-    alert(`${publishDate}からの逆算スケジュールを生成します（バックエンド未実装）`);
+  const handleGenerateSchedule = async () => {
+    if (!publishDate) {
+      alert('発行日を入力してください');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. 新規号を作成
+      const createRes = await fetch('/api/yumemaga-v2/create-issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishDate }),
+      });
+
+      const createData = await createRes.json();
+
+      if (!createData.success) {
+        alert(`エラー: ${createData.error}`);
+        setLoading(false);
+        return;
+      }
+
+      alert(`✅ ${createData.issue} を作成しました\n\n` +
+            `📅 締切日設定: ${createData.deadlinesSet}工程\n` +
+            `📁 Driveフォルダ作成: 成功 ${createData.driveFolders.success}件, 失敗 ${createData.driveFolders.failed}件`);
+
+      // 2. 月号リストを再取得
+      const issuesRes = await fetch('/api/yumemaga-v2/available-issues');
+      const issuesData = await issuesRes.json();
+      if (issuesData.success) {
+        setIssues(issuesData.issues);
+      }
+
+      // 3. 新しい月号を選択
+      setSelectedIssue(createData.issue);
+
+      // 4. データを再取得（新しい月号を直接渡す）
+      await fetchAllData(createData.issue);
+
+    } catch (error: any) {
+      console.error('新規号作成エラー:', error);
+      alert(`エラーが発生しました: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveProgress = () => {
@@ -709,10 +787,6 @@ export default function YumeMagaV2Page() {
       default:
         return <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">未送付</span>;
     }
-  };
-
-  const handleNextMonthRefresh = () => {
-    alert('次月号準備データを更新しました（バックエンド未実装）');
   };
 
   const handleNextMonthUpdateActualDate = async (processNo: string, date: string) => {
@@ -847,17 +921,23 @@ export default function YumeMagaV2Page() {
               <div className="flex gap-3">
                 <select
                   value={selectedIssue}
-                  onChange={(e) => setSelectedIssue(e.target.value)}
+                  onChange={(e) => {
+                    const newIssue = e.target.value;
+                    setSelectedIssue(newIssue);
+                    fetchAllData(newIssue);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option>2025年11月号</option>
-                  <option>2025年10月号</option>
-                  <option>2025年9月号</option>
+                  {issues.length > 0 ? (
+                    issues.map(({ issue }) => (
+                      <option key={issue} value={issue}>
+                        {issue}
+                      </option>
+                    ))
+                  ) : (
+                    <option>2025年11月号</option>
+                  )}
                 </select>
-                <button className="flex items-center gap-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold">
-                  <FileText className="w-5 h-5" />
-                  読み込み
-                </button>
               </div>
               <p className="text-sm text-gray-600 mt-2">
                 過去に作成したスケジュールを読み込んで編集できます
@@ -907,10 +987,22 @@ export default function YumeMagaV2Page() {
         {/* 次月号事前準備 */}
         <NextMonthPrepSection
           currentMonthIssue={selectedIssue}
-          nextMonthIssue="2025年12月号"
+          nextMonthIssue={nextMonthIssue}
           processes={nextMonthProcesses}
-          onRefresh={handleNextMonthRefresh}
+          companyPrepTasks={companyPageProduction ? [
+            ...(companyPageProduction.newCompanies || []),
+            ...(companyPageProduction.updatedCompanies || [])
+          ].map(company => ({
+            ...company,
+            tasks: company.tasks.filter(task =>
+              task.taskId === 'preparation-contract-check' ||
+              task.taskId === 'preparation-form-send' ||
+              task.taskId === 'preparation-data-submission'
+            )
+          })).filter(company => company.tasks.length > 0) : []}
           onUpdateActualDate={handleNextMonthUpdateActualDate}
+          onUpdateCompanyActualDate={handleUpdateActualDate}
+          onUpdateCompanyPlannedDate={handleUpdatePlannedDate}
         />
 
         {/* カテゴリ別予実管理 */}
@@ -935,7 +1027,19 @@ export default function YumeMagaV2Page() {
         {/* Phase 3: Zセクション（全体進捗管理） */}
         <OverallProgressSection
           categories={categories}
+          companyOverallTasks={companyPageProduction ? [
+            ...(companyPageProduction.newCompanies || []),
+            ...(companyPageProduction.updatedCompanies || [])
+          ].map(company => ({
+            ...company,
+            tasks: company.tasks.filter(task =>
+              task.taskId === 'overall-internal-check' ||
+              task.taskId === 'overall-confirmation'
+            )
+          })).filter(company => company.tasks.length > 0) : []}
           onUpdateConfirmationStatus={handleUpdateConfirmationStatus}
+          onUpdateCompanyActualDate={handleUpdateActualDate}
+          onUpdateCompanyPlannedDate={handleUpdatePlannedDate}
         />
 
         {/* 企業紹介ページ管理 */}

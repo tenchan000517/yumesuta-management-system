@@ -31,8 +31,11 @@ export interface NextMonthPrepSectionProps {
   currentMonthIssue: string;
   nextMonthIssue: string;
   processes: NextMonthProcessData[];
+  companyPrepTasks?: any[]; // 企業別準備タスク
   onRefresh: () => void;
   onUpdateActualDate: (processNo: string, date: string) => Promise<void>;
+  onUpdateCompanyActualDate?: (processNo: string, date: string) => Promise<void>;
+  onUpdateCompanyPlannedDate?: (processNo: string, date: string) => Promise<void>;
 }
 
 export interface NextMonthProgressSummaryProps {

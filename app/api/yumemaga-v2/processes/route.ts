@@ -49,7 +49,12 @@ function determineStatus(plannedDate: string, actualDate: string): string {
 }
 
 /**
- * 工程データ取得（ガント + 進捗シート結合）
+ * 工程データ取得 (V2対応)
+ *
+ * V2の変更点:
+ * - 進捗入力シート_V2（横持ち構造）から該当月号の1行のみ読み込み
+ * - 新工程マスター_V2から工程定義を取得
+ * - ガントシートは使用しない
  */
 export async function GET(request: Request) {
   try {
@@ -65,76 +70,102 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. ガントシートから工程スケジュールを取得
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const ganttData = await getSheetData(spreadsheetId, `${ganttSheetName}!A1:ZZ1000`);
-
-    if (ganttData.length === 0) {
-      return NextResponse.json(
-        { success: false, error: `ガントシート「${ganttSheetName}」が見つかりません` },
-        { status: 404 }
-      );
-    }
-
-    const headers = ganttData[0];
-    const dateHeaders = headers.slice(3); // A,B,C列をスキップ
-
-    const processSchedule: Record<string, string[]> = {};
-
-    ganttData.slice(1).forEach(row => {
-      const processName = row[0]; // "A-3 メイン文字起こし"
-      if (!processName) return;
-
-      const match = processName.match(/^([A-Z]-\d+)/);
-      if (!match) return;
-
-      const processNo = match[1];
-      const scheduledDates: string[] = [];
-
-      dateHeaders.forEach((date: string, i: number) => {
-        if (row[i + 3]) { // 列A,B,Cをスキップして値をチェック
-          scheduledDates.push(date);
-        }
-      });
-
-      processSchedule[processNo] = scheduledDates;
-    });
-
-    console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュールを取得`);
-
-    // 2. 進捗入力シートから実績を取得（active のみ）
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A1:J1000');
+    // 1. 進捗入力シート_V2から該当月号のデータを取得
+    const progressData = await getSheetData(spreadsheetId, '進捗入力シート_V2!A1:GV100');
 
     if (progressData.length === 0) {
       return NextResponse.json(
-        { success: false, error: '進捗入力シートが見つかりません' },
+        { success: false, error: '進捗入力シート_V2が見つかりません' },
         { status: 404 }
       );
     }
 
-    const processes = progressData
+    // 2. ヘッダー行から列マッピングを作成
+    const progressHeaders = progressData[0];
+    const headerMap: Record<string, { plannedCol: number; actualCol: number }> = {};
+
+    for (let col = 1; col < progressHeaders.length; col++) {
+      const header = progressHeaders[col];
+      if (!header) continue;
+
+      const match = header.match(/^([A-Z]-\d+)(予定|実績.*)/);
+      if (match) {
+        const processNo = match[1];
+        const type = match[2];
+
+        if (!headerMap[processNo]) {
+          headerMap[processNo] = { plannedCol: -1, actualCol: -1 };
+        }
+
+        if (type === '予定') {
+          headerMap[processNo].plannedCol = col;
+        } else if (type.startsWith('実績')) {
+          headerMap[processNo].actualCol = col;
+        }
+      }
+    }
+
+    // 3. 該当月号の行を取得
+    const progressRow = progressData.slice(1).find(row => row[0] === issue);
+
+    if (!progressRow) {
+      return NextResponse.json(
+        { success: false, error: `月号 ${issue} の進捗データが見つかりません` },
+        { status: 404 }
+      );
+    }
+
+    // 4. 新工程マスター_V2から工程定義を取得
+    const processMasterData = await getSheetData(spreadsheetId, '新工程マスター_V2!A1:F200');
+
+    if (processMasterData.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '新工程マスター_V2が見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    // 5. 工程データを構築
+    const processes = processMasterData
       .slice(1)
-      .filter(row => {
-        const status = row[8]; // I列: ステータス
-        const rowIssue = row[3]; // D列: 月号
-        return (status === 'active' || !status) && (!rowIssue || rowIssue === issue);
-      })
-      .map(row => ({
-        processNo: row[0],              // A列: 工程No
-        processName: row[1],            // B列: 工程名
-        requiredData: row[2] || '-',    // C列: 必要データ
-        issue: row[3] || '',            // D列: 月号
-        plannedDate: row[4] || '-',     // E列: 逆算予定日
-        inputPlannedDate: row[5] || '-', // F列: 入力予定日
-        actualDate: row[6] || '',       // G列: 実績日
-        confirmationStatus: row[7] || '-', // H列: 先方確認ステータス
-        scheduledDates: processSchedule[row[0]] || [],
-        status: determineStatus(row[4], row[6]),
-      }));
+      .filter(row => row[1]) // 工程Noがあるもののみ
+      .map(row => {
+        const processNo = row[1]; // B列: 工程No
+        const processName = row[2]; // C列: 工程名
+        const phase = row[3]; // D列: フェーズ
+        const order = row[4]; // E列: 順序
+        const dataType = row[5]; // F列: データ型
 
-    console.log(`✅ 工程データ: ${processes.length}件取得`);
+        const cols = headerMap[processNo];
+        let plannedDate = '-';
+        let actualDate = '';
 
-    // サマリー集計
+        if (cols) {
+          if (cols.plannedCol >= 0) {
+            plannedDate = progressRow[cols.plannedCol] || '-';
+          }
+          if (cols.actualCol >= 0) {
+            actualDate = progressRow[cols.actualCol] || '';
+          }
+        }
+
+        return {
+          processNo,
+          processName,
+          requiredData: '-', // V2では不使用
+          issue,
+          plannedDate,
+          inputPlannedDate: '-', // V2では不使用
+          actualDate,
+          confirmationStatus: '-', // 別途JSON管理
+          scheduledDates: [], // V2ではガント不使用
+          status: determineStatus(plannedDate, actualDate),
+        };
+      });
+
+    console.log(`✅ 工程データ: ${processes.length}件取得 (月号: ${issue})`);
+
+    // 6. サマリー集計
     const summary = {
       total: processes.length,
       completed: processes.filter(p => p.status === 'completed').length,

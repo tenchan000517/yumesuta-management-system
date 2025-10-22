@@ -25,59 +25,16 @@ export async function GET(request: Request) {
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
     // 1. バッチで必要なシートを一括取得
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const [ganttData, processMasterData, categoryMasterData, progressSheetData] = await getBatchSheetData(
+    const [processMasterData, categoryMasterData, progressSheetData] = await getBatchSheetData(
       spreadsheetId,
       [
-        `${ganttSheetName}!A1:ZZ1000`,
         '新工程マスター_V2!A1:F200',
         'カテゴリマスター!A1:J100',
         '進捗入力シート_V2!A1:GV100',
       ]
     );
 
-    if (ganttData.length === 0) {
-      return NextResponse.json(
-        { success: false, error: `ガントシート「${ganttSheetName}」が見つかりません` },
-        { status: 404 }
-      );
-    }
-
-    // 2. ガントシートから各工程の予定日を抽出
-    const headers = ganttData[0];
-    const dateHeaders = headers.slice(3); // A,B,C列をスキップ
-
-    const processSchedule: Record<string, string> = {};
-    const nextMonthProcessNos = new Set<string>();
-
-    ganttData.slice(1).forEach(row => {
-      const processName = row[0];
-      const layer = row[1];
-      if (!processName) return;
-
-      const match = processName.match(/^([A-Z]-\d+)/);
-      if (!match) return;
-
-      const processNo = match[1];
-
-      // 次月号工程を記録
-      if (layer === '次月号') {
-        nextMonthProcessNos.add(processNo);
-        return;
-      }
-
-      // 最初の予定日を取得
-      for (let i = 0; i < dateHeaders.length; i++) {
-        if (row[i + 3]) {
-          processSchedule[processNo] = dateHeaders[i];
-          break;
-        }
-      }
-    });
-
-    console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュールを取得`);
-
-    // 3. 新工程マスター_V2から工程定義を取得
+    // 2. 新工程マスター_V2から工程定義を取得
     if (processMasterData.length === 0) {
       return NextResponse.json(
         { success: false, error: '新工程マスター_V2が見つかりません' },
@@ -100,7 +57,7 @@ export async function GET(request: Request) {
 
     console.log(`📋 新工程マスター_V2: ${Object.keys(processMaster).length}工程を取得`);
 
-    // 4. カテゴリマスターから動的にカテゴリを取得
+    // 3. カテゴリマスターから動的にカテゴリを取得
     const categories: Record<string, any[]> = {};
     const categoryMetadata: Record<string, { driveFolderId: string; requiredData: string[] }> = {};
 
@@ -119,7 +76,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 5. 進捗入力シート_V2から該当月号の行を取得
+    // 4. 進捗入力シート_V2から該当月号の行を取得
     if (progressSheetData.length === 0) {
       return NextResponse.json(
         { success: false, error: '進捗入力シート_V2が見つかりません' },
@@ -134,7 +91,7 @@ export async function GET(request: Request) {
       console.log(`⚠️  月号 ${issue} の進捗データが見つかりません。空データで返します。`);
     }
 
-    // 6. 工程データを構築（横持ち構造から抽出）
+    // 5. 工程データを構築（横持ち構造から抽出）
     // ヘッダー行から工程Noと予定/実績を抽出
     // 例: "S-1予定", "S-1実績", "S-2予定", "S-2実績", ...
     const headerMap: Record<string, { plannedCol: number; actualCol: number }> = {};
@@ -163,25 +120,35 @@ export async function GET(request: Request) {
 
     console.log(`📊 進捗入力シート_V2: ${Object.keys(headerMap).length}工程の列マッピングを作成`);
 
-    // 7. 内部チェック・確認送付工程は確認ステータス取得のために別管理
+    // 6. 内部チェック・確認送付工程は確認ステータス取得のために別管理
     const confirmationProcesses: Record<string, { internalCheck?: any; confirmation?: any }> = {};
 
-    // 8. カテゴリ別に工程データを構築
+    // 7. カテゴリ別に工程データを構築
     Object.keys(processMaster).forEach(processNo => {
       const master = processMaster[processNo];
       const categoryId = processNo.split('-')[0];
 
-      // 次月号工程を除外
-      if (nextMonthProcessNos.has(processNo)) return;
-
       // カテゴリが存在しない場合はスキップ
       if (!categories[categoryId]) return;
+
+      // 準備フェーズの工程はスキップ（カテゴリ別予実管理には制作フェーズのみ表示）
+      if (master.phase === '準備') return;
 
       const cols = headerMap[processNo];
       if (!cols) return;
 
-      const plannedDate = processSchedule[processNo] || (progressRow ? progressRow[cols.plannedCol] : '') || '-';
-      const actualDate = progressRow ? (progressRow[cols.actualCol] || '') : '';
+      // 予定日と実績日を進捗入力シート_V2から直接取得
+      let plannedDate = '-';
+      let actualDate = '';
+
+      if (progressRow) {
+        if (cols.plannedCol >= 0) {
+          plannedDate = progressRow[cols.plannedCol] || '-';
+        }
+        if (cols.actualCol >= 0) {
+          actualDate = progressRow[cols.actualCol] || '';
+        }
+      }
 
       // 確認送付工程はJSON管理
       let confirmationStatus = '-';
@@ -255,7 +222,7 @@ export async function GET(request: Request) {
       });
     });
 
-    // 9. Google Driveファイルチェックによる自動実施日設定
+    // 8. Google Driveファイルチェックによる自動実施日設定
     const issueFormatted = issue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
       const paddedMonth = month.padStart(2, '0');
       return `${year}_${paddedMonth}`;
@@ -321,7 +288,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 10. カテゴリ別の進捗率を計算（オブジェクト形式で返す）
+    // 9. カテゴリ別の進捗率を計算（オブジェクト形式で返す）
     const result: Record<string, any> = {};
 
     Object.keys(categories).forEach(cat => {

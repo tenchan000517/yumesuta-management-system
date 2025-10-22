@@ -242,26 +242,39 @@ function CompanyCard({ company, onUpdateActualDate, onUpdatePlannedDate }: {
       {/* タスクリスト */}
       <div className="p-4">
         <div className="space-y-3">
-          {company.tasks.map((task) => {
+          {company.tasks
+            .filter(task =>
+              task.taskId === 'info-provision' ||
+              task.taskId === 'photo-collection' ||
+              task.taskId === 'production-page'
+            )
+            .map((task) => {
             const isExpanded = expandedTasks.has(task.taskId);
             const hasDetails = task.details && task.details.length > 0;
 
+            // ページ制作タスクは特別扱い（プログレスバーなし、常に詳細表示）
+            const isProductionPage = task.taskId === 'production-page';
+
             return (
               <div key={task.taskId}>
-                {/* タスク名とプログレスバー */}
+                {/* タスク名 */}
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-semibold text-gray-900">{task.taskName}</span>
-                  <span className="text-xs text-gray-600">{task.progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
-                  <div
-                    className="bg-blue-600 h-1.5 rounded-full transition-all"
-                    style={{ width: `${task.progress}%` }}
-                  />
+                  {!isProductionPage && <span className="text-xs text-gray-600">{task.progress}%</span>}
                 </div>
 
-                {/* 詳細表示トグルボタン */}
-                {hasDetails && (
+                {/* プログレスバー（ページ制作以外） */}
+                {!isProductionPage && (
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+                    <div
+                      className="bg-blue-600 h-1.5 rounded-full transition-all"
+                      style={{ width: `${task.progress}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* 詳細表示トグルボタン（ページ制作以外） */}
+                {!isProductionPage && hasDetails && (
                   <button
                     onClick={() => toggleTaskExpansion(task.taskId)}
                     className="text-xs text-blue-600 hover:text-blue-800 mb-2"
@@ -270,8 +283,8 @@ function CompanyCard({ company, onUpdateActualDate, onUpdatePlannedDate }: {
                   </button>
                 )}
 
-                {/* 詳細表示 */}
-                {isExpanded && hasDetails && (
+                {/* 詳細表示（ページ制作は常に表示、他は展開時のみ） */}
+                {((isProductionPage || isExpanded) && hasDetails) && (
                   <div className="mt-2 pl-2 space-y-1">
                     {task.details!.map((detail, idx) => (
                       <div key={idx} className="text-xs text-gray-600 flex items-center gap-2">

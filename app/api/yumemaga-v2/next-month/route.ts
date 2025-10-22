@@ -1,95 +1,115 @@
 import { NextResponse } from 'next/server';
-import { getSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData } from '@/lib/google-sheets';
 
 /**
- * 次月号準備データ取得
+ * 準備フェーズデータ取得 (V2対応)
+ *
+ * V2の変更点:
+ * - 進捗入力シート_V2から指定された号の準備フェーズのデータを取得
+ * - 新工程マスター_V2から準備フェーズ工程の定義を取得
+ * - ガントシートは使用しない
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const currentIssue = searchParams.get('currentIssue');
+    const issue = searchParams.get('issue') || searchParams.get('currentIssue'); // 後方互換性のため両方サポート
 
-    if (!currentIssue) {
+    if (!issue) {
       return NextResponse.json(
-        { success: false, error: '現在の月号を指定してください' },
+        { success: false, error: '月号を指定してください' },
         { status: 400 }
       );
     }
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // ガントシートから次月号工程を取得
-    const ganttSheetName = `逆算配置_ガント_${currentIssue}`;
-    const ganttData = await getSheetData(spreadsheetId, `${ganttSheetName}!A1:ZZ1000`);
+    // 1. バッチで必要なシートを一括取得
+    const [processMasterData, progressSheetData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        '新工程マスター_V2!A1:F200',
+        '進捗入力シート_V2!A1:GV100',
+      ]
+    );
 
-    if (ganttData.length === 0) {
-      return NextResponse.json(
-        { success: false, error: `ガントシート「${ganttSheetName}」が見つかりません` },
-        { status: 404 }
-      );
+    // 2. 進捗入力シート_V2から指定された号の行を取得
+    const progressHeaders = progressSheetData[0];
+    const issueRow = progressSheetData.slice(1).find(row => row[0] === issue);
+
+    // 指定された号の行が存在しない場合は空配列を返す
+    if (!issueRow) {
+      console.log(`⚠️  ${issue} の進捗データが見つかりません。空データで返します。`);
+      return NextResponse.json({
+        success: true,
+        issue,
+        processes: [],
+      });
     }
 
-    // ガントシートのヘッダー行（日付）を取得
-    const headers = ganttData[0];
-    const dateHeaders = headers.slice(3); // A,B,C列をスキップ
+    // 4. ヘッダー行から列マッピングを作成
+    const headerMap: Record<string, { plannedCol: number; actualCol: number }> = {};
 
-    // レイヤー列が "次月号" の工程を抽出
-    type ProcessData = {
-      processNo: string;
-      name: string;
-      plannedDate: string;
-      nextMonthIssue: string;
-      layer: string;
-      isNextMonth: boolean;
-    };
+    for (let col = 1; col < progressHeaders.length; col++) {
+      const header = progressHeaders[col];
+      if (!header) continue;
 
-    const nextMonthProcesses = ganttData.slice(1)
-      .filter(row => row[1] === '次月号') // B列: レイヤー
+      const match = header.match(/^([A-Z]-\d+)(予定|実績.*)/);
+      if (match) {
+        const processNo = match[1];
+        const type = match[2];
+
+        if (!headerMap[processNo]) {
+          headerMap[processNo] = { plannedCol: -1, actualCol: -1 };
+        }
+
+        if (type === '予定') {
+          headerMap[processNo].plannedCol = col;
+        } else if (type.startsWith('実績')) {
+          headerMap[processNo].actualCol = col;
+        }
+      }
+    }
+
+    // 3. 新工程マスター_V2から準備フェーズ工程を取得
+    // 準備フェーズの定義: フェーズが「準備」の工程
+    const prepProcesses = processMasterData
+      .slice(1)
+      .filter(row => {
+        const phase = row[3]; // D列: フェーズ
+        return phase === '準備';
+      })
       .map(row => {
-        const processName = row[0]; // "S-1 【12月号】ゆめマガ○月号企画決定"
-        if (!processName) return null;
+        const processNo = row[1]; // B列: 工程No
+        const processName = row[2]; // C列: 工程名
 
-        const match = processName.match(/^([A-Z]-\d+)/);
-        const monthMatch = processName.match(/【(\d+月号)】/);
-
-        // 工程名から工程Noと【月号】を除去
-        // "S-1 【12月号】ゆめマガ○月号企画決定" → "ゆめマガ○月号企画決定"
-        let cleanName = processName;
-        cleanName = cleanName.replace(/^[A-Z]-\d+\s+/, ''); // 工程No除去
-        cleanName = cleanName.replace(/【\d+月号】/, '');    // 【月号】除去
-
-        // 最初の予定日を取得
+        const cols = headerMap[processNo];
         let plannedDate = '-';
-        for (let i = 0; i < dateHeaders.length; i++) {
-          if (row[i + 3]) { // 列A,B,Cをスキップして値をチェック
-            plannedDate = dateHeaders[i];
-            break;
+        let actualDate = '';
+
+        if (cols) {
+          if (cols.plannedCol >= 0) {
+            plannedDate = issueRow[cols.plannedCol] || '-';
+          }
+          if (cols.actualCol >= 0) {
+            actualDate = issueRow[cols.actualCol] || '';
           }
         }
 
         return {
-          processNo: match ? match[1] : '',
-          name: cleanName,
-          plannedDate, // ガントから取得した予定日
-          nextMonthIssue: monthMatch ? `2025年${monthMatch[1]}` : '',
-          layer: row[1],
-          isNextMonth: true,
+          processNo,
+          name: processName,
+          plannedDate,
+          actualDate,
+          issue,
         };
-      })
-      .filter((p): p is ProcessData => p !== null && !!p.processNo);
+      });
 
-    // 次月号を推定
-    let nextMonthIssue = '';
-    if (nextMonthProcesses.length > 0 && nextMonthProcesses[0].nextMonthIssue) {
-      nextMonthIssue = nextMonthProcesses[0].nextMonthIssue;
-    }
-
-    console.log(`✅ 次月号工程: ${nextMonthProcesses.length}件取得 (次月号: ${nextMonthIssue})`);
+    console.log(`✅ 準備フェーズ工程: ${prepProcesses.length}件取得 (${issue})`);
 
     return NextResponse.json({
       success: true,
-      nextMonthIssue,
-      processes: nextMonthProcesses,
+      issue,
+      processes: prepProcesses,
     });
   } catch (error: any) {
     console.error('次月号準備データ取得エラー:', error);

@@ -94,16 +94,14 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. バッチで必要なシートを一括取得（5つのシートを1回のAPIリクエストで取得）
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const [companyData, categoryData, progressDataV2, processMasterData, ganttData] = await getBatchSheetData(
+    // 1. バッチで必要なシートを一括取得（4つのシートを1回のAPIリクエストで取得）
+    const [companyData, categoryData, progressDataV2, processMasterData] = await getBatchSheetData(
       spreadsheetId,
       [
         '企業マスター!A2:AZ100',
         'カテゴリマスター!A2:J100',
         '進捗入力シート_V2!A1:GV100',
         '新工程マスター_V2!A1:F200',
-        `${ganttSheetName}!A1:ZZ1000`,
       ]
     );
 
@@ -181,34 +179,6 @@ export async function GET(request: Request) {
       console.warn('⚠️ カテゴリCのDriveフォルダIDが見つかりません。ファイルアップロード状況の取得をスキップします。');
     }
 
-    const processSchedule: Record<string, string> = {};
-    if (ganttData.length > 0) {
-      const headers = ganttData[0];
-      const dateHeaders = headers.slice(3);
-      console.log(`📅 ガントシートのヘッダー数: ${dateHeaders.length}, 行数: ${ganttData.length - 1}`);
-
-      ganttData.slice(1).forEach(row => {
-        const processName = row[0];
-        if (!processName) return;
-
-        const match = processName.match(/^([A-Z]-\d+)/);
-        if (!match) return;
-
-        const processNo = match[1];
-
-        for (let i = 0; i < dateHeaders.length; i++) {
-          if (row[i + 3]) {
-            processSchedule[processNo] = dateHeaders[i];
-            console.log(`📅 ${processNo} の予定日: ${dateHeaders[i]}`);
-            break;
-          }
-        }
-      });
-      console.log(`📅 取得した予定日数: ${Object.keys(processSchedule).length}`);
-    } else {
-      console.warn('⚠️ ガントシートが空です');
-    }
-
     // 3. 各企業の制作工程を取得
     const newCompanies: CompanyProduction[] = [];
     const updatedCompanies: CompanyProduction[] = [];
@@ -229,13 +199,13 @@ export async function GET(request: Request) {
           const master = processMasterMap[processNo];
           const cols = headerMap[processNo];
 
-          // 予定日と実績日を取得
-          let plannedDate = processSchedule[processNo] || '-';
+          // 予定日と実績日を進捗入力シート_V2から取得
+          let plannedDate = '-';
           let actualDate = '';
 
           if (progressRow && cols) {
             if (cols.plannedCol >= 0) {
-              plannedDate = progressRow[cols.plannedCol] || plannedDate;
+              plannedDate = progressRow[cols.plannedCol] || '-';
             }
             if (cols.actualCol >= 0) {
               actualDate = progressRow[cols.actualCol] || '';
@@ -285,6 +255,27 @@ export async function GET(request: Request) {
       // タスクリスト生成
       const tasks: Task[] = [];
 
+      // 工程を取得するヘルパー関数
+      const getProcess = (processNo: string) => {
+        return companyProcesses.find(p => p.processNo === processNo);
+      };
+
+      // 工程データを詳細形式に変換するヘルパー関数
+      const createProcessDetail = (process: any) => {
+        if (!process) return null;
+
+        return {
+          type: 'process' as const,
+          processNo: process.processNo,
+          name: process.processName,
+          plannedDate: process.plannedDate || '-',
+          actualDate: process.actualDate || '',
+          completed: !!process.actualDate,
+        };
+      };
+
+      // === 企業別ページ制作進捗用（既存のまま維持） ===
+
       // タスク1: 情報提供依頼
       const infoSheetFileCount = fileUpload['情報シート']?.fileCount || 0;
       const infoSheetProgress = infoSheetFileCount > 0 ? 100 : 0;
@@ -312,9 +303,9 @@ export async function GET(request: Request) {
         ],
       });
 
-      // タスク2: 写真取得（情報シートを除く7フォルダ）
+      // タスク2: 写真取得
       const photoFolders: CompanyFolderType[] = ['ロゴ', 'ヒーロー画像', 'QRコード', '代表者写真', 'サービス画像', '社員写真', 'その他'];
-      const photoDetails = photoFolders.map(folder => {
+      const photoDetails: TaskDetail[] = photoFolders.map(folder => {
         const fileData = fileUpload[folder] || { uploaded: false, fileCount: 0 };
         return {
           type: 'folder' as const,
@@ -334,60 +325,85 @@ export async function GET(request: Request) {
         details: photoDetails,
       });
 
-      // タスク3: ページ制作（進捗入力シートの工程実績から計算）
-      const pageProductionProcesses = companyProcesses.filter(row => {
-        const processNo = row.processNo;
-        // C-6以降の工程（写真レタッチ、ページ制作、内部チェック、先方確認送付、追加可能期間など）
-        if (!processNo) return false;
-        const match = processNo.match(/^([A-Z])-(\d+)$/);
-        if (!match) return false;
-        const processNum = parseInt(match[2]);
-        return processNum >= 6; // C-6, C-7, C-8, C-9, C-10...
-      });
+      // === 準備セクション（次月号事前準備用） ===
 
-      const pageProductionDetails = pageProductionProcesses.map(row => {
-        const processNo = row.processNo;
-        let processName = row.processName || '';
-        const plannedDate = row.plannedDate || '-';
-        const actualDate = row.actualDate || '';
+      // タスク1: 契約企業確認 (C-1/E-1)
+      const process1 = getProcess(`${categoryId}-1`);
+      if (process1) {
+        const detail = createProcessDetail(process1);
+        tasks.push({
+          taskId: 'preparation-contract-check',
+          taskName: '契約企業確認',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
 
-        // 工程名から工程Noを除去
-        const match = processName.match(/^[A-Z]-\d+\s+(.+)$/);
-        if (match) {
-          processName = match[1];
-        }
+      // タスク2: 情報入力フォーム送付 (C-2/E-2)
+      const process2 = getProcess(`${categoryId}-2`);
+      if (process2) {
+        const detail = createProcessDetail(process2);
+        tasks.push({
+          taskId: 'preparation-form-send',
+          taskName: '情報入力フォーム送付',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
 
-        // 「新規企業①」などのプレフィックスを除去
-        processName = processName
-          .replace(/^新規企業①?/, '')
-          .replace(/^既存企業/, '')
-          .trim();
+      // タスク3: データ提出 (C-3/E-3)
+      const process3 = getProcess(`${categoryId}-3`);
+      if (process3) {
+        const detail = createProcessDetail(process3);
+        tasks.push({
+          taskId: 'preparation-data-submission',
+          taskName: 'データ提出',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
 
-        return {
-          type: 'process' as const,
-          processNo,
-          name: processName,
-          plannedDate,
-          actualDate,
-          completed: !!actualDate,
-        };
-      });
+      // === 制作セクション ===
 
-      const completedPageProcesses = pageProductionDetails.filter(d => d.completed).length;
+      // タスク4: ページ制作 (C-4/E-4)
+      const process4 = getProcess(`${categoryId}-4`);
+      if (process4) {
+        const detail = createProcessDetail(process4);
+        tasks.push({
+          taskId: 'production-page',
+          taskName: 'ページ制作',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
 
-      const pageProductionProgress = pageProductionProcesses.length > 0
-        ? Math.round((completedPageProcesses / pageProductionProcesses.length) * 100)
-        : 0;
+      // === 全体進捗セクション ===
 
-      tasks.push({
-        taskId: 'page-production',
-        taskName: 'ページ制作',
-        progress: pageProductionProgress,
-        details: pageProductionDetails,
-        note: `制作工程 ${completedPageProcesses}/${pageProductionProcesses.length} 完了`,
-      });
+      // タスク5: 内部チェック (C-5/E-5)
+      const process5 = getProcess(`${categoryId}-5`);
+      if (process5) {
+        const detail = createProcessDetail(process5);
+        tasks.push({
+          taskId: 'overall-internal-check',
+          taskName: '内部チェック',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
 
-      // 全体進捗: 3つのタスクの平均
+      // タスク6: 確認送付/修正 (C-6/E-6)
+      const process6 = getProcess(`${categoryId}-6`);
+      if (process6) {
+        const detail = createProcessDetail(process6);
+        tasks.push({
+          taskId: 'overall-confirmation',
+          taskName: '確認送付/修正',
+          progress: detail?.completed ? 100 : 0,
+          details: detail ? [detail] : [],
+        });
+      }
+
+      // 全体進捗: 全タスクの平均
       const totalProgress = tasks.reduce((sum, t) => sum + t.progress, 0);
       const progress = tasks.length > 0 ? Math.round(totalProgress / tasks.length) : 0;
 

@@ -1,73 +1,38 @@
 import { NextResponse } from 'next/server';
-import { listFilesInFolder } from '@/lib/google-drive';
+import { getSheetData } from '@/lib/google-sheets';
 
 /**
  * 利用可能な月号一覧を取得
- * - Google Driveのカテゴリフォルダ内の月号ディレクトリをスキャン
- * - 存在する月号 + 向こう3ヶ月分を返す
+ * - 進捗入力シート_V2のA列から月号を取得
  */
 export async function GET() {
   try {
-    // カテゴリAのフォルダID（カテゴリマスターJ列から取得）
-    const categoryAFolderId = '1w57bpaloqFGX7XYpJSr3q-XiDtjrfUc5';
+    const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 録音データフォルダ配下の月号ディレクトリを取得
-    const folders = await listFilesInFolder(categoryAFolderId);
-    const recordingFolder = folders.find(f => f.name === '録音データ');
+    // 進捗入力シート_V2のA列（月号）を取得
+    const progressData = await getSheetData(spreadsheetId, '進捗入力シート_V2!A:A');
+    const issues: Array<{ issue: string; isNew: boolean }> = [];
 
-    const existingIssues = new Set<string>();
-
-    if (recordingFolder) {
-      // 録音データフォルダ配下の月号フォルダを取得
-      const issueFolders = await listFilesInFolder(recordingFolder.id!);
-      issueFolders.forEach(folder => {
-        // "2025_11" → "2025年11月号" に変換
-        const match = folder.name?.match(/^(\d{4})_(\d{1,2})$/);
-        if (match) {
-          const year = match[1];
-          const month = parseInt(match[2], 10);
-          existingIssues.add(`${year}年${month}月号`);
-        }
-      });
-    }
-
-    // 現在の日付から向こう3ヶ月分を生成
-    const futureIssues: Array<{ issue: string; isNew: boolean }> = [];
-    const today = new Date();
-
-    for (let i = 0; i < 3; i++) {
-      const targetDate = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      const year = targetDate.getFullYear();
-      const month = targetDate.getMonth() + 1;
-      const issueLabel = `${year}年${month}月号`;
-
-      if (existingIssues.has(issueLabel)) {
-        futureIssues.push({ issue: issueLabel, isNew: false });
-      } else {
-        futureIssues.push({ issue: issueLabel, isNew: true });
+    // ヘッダー行をスキップ（1行目）
+    for (let i = 1; i < progressData.length; i++) {
+      const issue = progressData[i][0];
+      if (issue && typeof issue === 'string' && issue.match(/^\d{4}年\d{1,2}月号$/)) {
+        issues.push({ issue, isNew: false });
       }
     }
 
-    // 既存の月号で未来3ヶ月に含まれないものを追加
-    const allIssues: Array<{ issue: string; isNew: boolean }> = [];
-
-    existingIssues.forEach(issue => {
-      if (!futureIssues.some(f => f.issue === issue)) {
-        allIssues.push({ issue, isNew: false });
-      }
-    });
-
-    // 日付順にソート
-    allIssues.push(...futureIssues);
-    allIssues.sort((a, b) => {
+    // 日付順にソート（降順: 新しい号が上）
+    issues.sort((a, b) => {
       const [yearA, monthA] = a.issue.match(/(\d+)年(\d+)月号/)?.slice(1).map(Number) || [0, 0];
       const [yearB, monthB] = b.issue.match(/(\d+)年(\d+)月号/)?.slice(1).map(Number) || [0, 0];
-      return (yearA * 12 + monthA) - (yearB * 12 + monthB);
+      return (yearB * 12 + monthB) - (yearA * 12 + monthA); // 降順
     });
+
+    console.log(`📋 進捗入力シート_V2から ${issues.length} 件の月号を取得`);
 
     return NextResponse.json({
       success: true,
-      issues: allIssues,
+      issues,
     });
 
   } catch (error: any) {

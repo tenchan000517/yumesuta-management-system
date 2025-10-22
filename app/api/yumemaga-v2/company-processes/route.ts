@@ -198,15 +198,13 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. バッチで必要なシートを一括取得（5つのシートを1回のAPIリクエストで取得）
-    const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const [companyMasterData, progressDataV2, processMasterData, ganttData, categoryData] = await getBatchSheetData(
+    // 1. バッチで必要なシートを一括取得（4つのシートを1回のAPIリクエストで取得）
+    const [companyMasterData, progressDataV2, processMasterData, categoryData] = await getBatchSheetData(
       spreadsheetId,
       [
         '企業マスター!A1:AZ100',
         '進捗入力シート_V2!A1:GV100',
         '新工程マスター_V2!A1:F200',
-        `${ganttSheetName}!A1:ZZ1000`,
         'カテゴリマスター!A2:J100',
       ]
     );
@@ -285,33 +283,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 2. ガントシートから予定日を取得
-    const processSchedule: Record<string, string> = {};
-    if (ganttData.length > 0) {
-      const headers = ganttData[0];
-      const dateHeaders = headers.slice(3);
-
-      ganttData.slice(1).forEach(row => {
-        const processName = row[0];
-        if (!processName) return;
-
-        const match = processName.match(/^([A-Z]-\d+)/);
-        if (!match) return;
-
-        const processNo = match[1];
-
-        for (let i = 0; i < dateHeaders.length; i++) {
-          if (row[i + 3]) {
-            processSchedule[processNo] = dateHeaders[i];
-            break;
-          }
-        }
-      });
-    }
-
-    console.log(`📅 ガントシート: ${Object.keys(processSchedule).length}工程のスケジュール取得`);
-
-    // 3. カテゴリC（企業情報）のDriveフォルダID取得
+    // 2. カテゴリC（企業情報）のDriveフォルダID取得
     const categoryCRow = categoryData.find((row: any[]) => row[0] === 'C');
     const categoryCDriveId = categoryCRow ? categoryCRow[9] : null;
 
@@ -352,13 +324,13 @@ export async function GET(request: Request) {
           const master = processMasterMap[processNo];
           const cols = headerMap[processNo];
 
-          // 予定日と実績日を取得
-          let plannedDate = processSchedule[processNo] || '-';
+          // 予定日と実績日を進捗入力シート_V2から取得
+          let plannedDate = '-';
           let actualDate = '';
 
           if (progressRow && cols) {
             if (cols.plannedCol >= 0) {
-              plannedDate = progressRow[cols.plannedCol] || plannedDate;
+              plannedDate = progressRow[cols.plannedCol] || '-';
             }
             if (cols.actualCol >= 0) {
               actualDate = progressRow[cols.actualCol] || '';
