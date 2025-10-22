@@ -94,17 +94,58 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. バッチで必要なシートを一括取得（4つのシートを1回のAPIリクエストで取得）
+    // 1. バッチで必要なシートを一括取得（5つのシートを1回のAPIリクエストで取得）
     const ganttSheetName = `逆算配置_ガント_${issue}`;
-    const [companyData, categoryData, progressData, ganttData] = await getBatchSheetData(
+    const [companyData, categoryData, progressDataV2, processMasterData, ganttData] = await getBatchSheetData(
       spreadsheetId,
       [
         '企業マスター!A2:AZ100',
         'カテゴリマスター!A2:J100',
-        '進捗入力シート!A2:J1000',
+        '進捗入力シート_V2!A1:GV100',
+        '新工程マスター_V2!A1:F200',
         `${ganttSheetName}!A1:ZZ1000`,
       ]
     );
+
+    // V2のヘッダー行から列マッピングを作成
+    const progressHeaders = progressDataV2[0];
+    const headerMap: Record<string, { plannedCol: number; actualCol: number }> = {};
+
+    for (let col = 1; col < progressHeaders.length; col++) {
+      const header = progressHeaders[col];
+      if (!header) continue;
+
+      const match = header.match(/^([A-Z]-\d+)(予定|実績.*)/);
+      if (match) {
+        const processNo = match[1];
+        const type = match[2];
+
+        if (!headerMap[processNo]) {
+          headerMap[processNo] = { plannedCol: -1, actualCol: -1 };
+        }
+
+        if (type === '予定') {
+          headerMap[processNo].plannedCol = col;
+        } else if (type.startsWith('実績')) {
+          headerMap[processNo].actualCol = col;
+        }
+      }
+    }
+
+    // 該当月号の行を取得
+    const progressRow = progressDataV2.slice(1).find(row => row[0] === issue);
+
+    // 工程マスターから工程情報を取得
+    const processMasterMap: Record<string, { processName: string; phase: string }> = {};
+    processMasterData.slice(1).forEach(row => {
+      const processNo = row[1]; // B列: 工程No
+      const processName = row[2]; // C列: 工程名
+      const phase = row[3]; // D列: フェーズ
+
+      if (processNo) {
+        processMasterMap[processNo] = { processName, phase };
+      }
+    });
 
     // 今号の企業をフィルタリング（最終更新号が今号 または 初掲載号が今号）
     const currentIssueCompanies = companyData
@@ -178,16 +219,36 @@ export async function GET(request: Request) {
       // 企業マスター51列の進捗計算
       const masterProgress = calculateCompanyMasterProgress(company.rawRow);
 
-      // 該当カテゴリの工程を取得（進捗入力シートから）
-      const companyProcesses = progressData.filter((row: any[]) => {
-        const processNo = row[0];
-        const processIssue = row[3];
+      // 該当カテゴリの工程を取得（V2: 工程マスターからフィルタリング）
+      const companyProcesses = Object.keys(processMasterMap)
+        .filter(processNo => {
+          const processCategory = processNo.split('-')[0];
+          return processCategory === categoryId;
+        })
+        .map(processNo => {
+          const master = processMasterMap[processNo];
+          const cols = headerMap[processNo];
 
-        // 月号が指定されている場合は月号もチェック、空の場合はカテゴリIDのみでマッチ
-        const issueMatch = !processIssue || processIssue === issue;
+          // 予定日と実績日を取得
+          let plannedDate = processSchedule[processNo] || '-';
+          let actualDate = '';
 
-        return processNo && processNo.startsWith(categoryId) && issueMatch;
-      });
+          if (progressRow && cols) {
+            if (cols.plannedCol >= 0) {
+              plannedDate = progressRow[cols.plannedCol] || plannedDate;
+            }
+            if (cols.actualCol >= 0) {
+              actualDate = progressRow[cols.actualCol] || '';
+            }
+          }
+
+          return {
+            processNo,
+            processName: master.processName,
+            plannedDate,
+            actualDate,
+          };
+        });
 
       // ファイルアップロード状況を取得
       const fileUpload: Record<CompanyFolderType, { uploaded: boolean; fileCount: number }> = {} as any;
@@ -275,7 +336,7 @@ export async function GET(request: Request) {
 
       // タスク3: ページ制作（進捗入力シートの工程実績から計算）
       const pageProductionProcesses = companyProcesses.filter(row => {
-        const processNo = row[0];
+        const processNo = row.processNo;
         // C-6以降の工程（写真レタッチ、ページ制作、内部チェック、先方確認送付、追加可能期間など）
         if (!processNo) return false;
         const match = processNo.match(/^([A-Z])-(\d+)$/);
@@ -285,10 +346,10 @@ export async function GET(request: Request) {
       });
 
       const pageProductionDetails = pageProductionProcesses.map(row => {
-        const processNo = row[0];
-        let processName = row[1] || '';
-        const plannedDate = processSchedule[processNo] || row[4] || '-'; // ガントシートから取得、なければE列
-        const actualDate = row[6] || ''; // G列: 実績日
+        const processNo = row.processNo;
+        let processName = row.processName || '';
+        const plannedDate = row.plannedDate || '-';
+        const actualDate = row.actualDate || '';
 
         // 工程名から工程Noを除去
         const match = processName.match(/^[A-Z]-\d+\s+(.+)$/);

@@ -58,20 +58,24 @@ export async function PUT(request: Request) {
         });
       }
 
-      // 4. 進捗入力シートから該当工程を検索
-      const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A2:J1000');
+      // 4. V2の actual-date API を使って実績日を更新
+      const today = new Date().toISOString().split('T')[0]; // "2025-10-22"
 
-      const targetRow = progressData.find((row: any[]) => {
-        const processNo = row[0];
-        const processIssue = row[3];
-        const actualDate = row[6];
-
-        return processNo === targetProcessNo &&
-               (processIssue === issue || !processIssue) &&
-               !actualDate; // 未完了のもの
+      // actual-date APIを直接呼び出す代わりに、内部的に更新
+      const apiUrl = new URL('/api/yumemaga-v2/actual-date', request.url);
+      const actualDateResponse = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue,
+          processNo: targetProcessNo,
+          actualDate: today,
+        }),
       });
 
-      if (!targetRow) {
+      const actualDateResult = await actualDateResponse.json();
+
+      if (!actualDateResult.success) {
         return NextResponse.json({
           success: true,
           completedProcesses: [],
@@ -79,21 +83,10 @@ export async function PUT(request: Request) {
         });
       }
 
-      // 5. 実績日を更新
-      const today = new Date().toLocaleDateString('ja-JP');
-      const rowIndex = progressData.indexOf(targetRow) + 2;
-
-      await updateSheetCell(
-        spreadsheetId,
-        '進捗入力シート',
-        `G${rowIndex}`,
-        today
-      );
-
       return NextResponse.json({
         success: true,
         completedProcesses: [targetProcessNo],
-        processName: targetRow[1],
+        processName: targetProcessNo,
         message: `${companyName}の工程 ${targetProcessNo} を完了しました`,
       });
     }
@@ -115,30 +108,24 @@ export async function PUT(request: Request) {
       );
     }
 
-    // 2. 進捗入力シートから該当工程を検索
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A2:J200');
+    // 2. 新工程マスター_V2から該当工程を検索
+    const processMasterData = await getSheetData(spreadsheetId, '新工程マスター_V2!A1:F200');
 
-    const targetRow = progressData.find((row: any[]) => {
-      const processNo = row[0] || '';           // A列: 工程No
-      const requiredData = row[2] || '';        // C列: 必要データ
-      const processIssue = row[3] || '';        // D列: 月号
-      const actualDate = row[6] || '';          // G列: 実績日
+    const targetProcess = processMasterData.slice(1).find((row: any[]) => {
+      const processNo = row[1] || '';           // B列: 工程No
+      const processName = row[2] || '';         // C列: 工程名
 
       // 条件:
       // - 工程NoがカテゴリIDで始まる
-      // - 必要データにデータ種別名を含む
-      // - 月号が一致または空
-      // - 実績日が未入力（既に完了している場合はスキップ）
+      // - 工程名にデータ種別名を含む（例: "データ提出", "撮影"）
       return (
         processNo.startsWith(categoryId) &&
-        requiredData.includes(dataTypeName) &&
-        (processIssue === issue || processIssue === '') &&
-        !actualDate
+        (processName.includes('データ提出') || processName.includes('撮影') || processName.includes('原稿提出'))
       );
     });
 
     // 3. エッジケース処理
-    if (!targetRow) {
+    if (!targetProcess) {
       console.log(`該当工程が見つかりませんでした: issue=${issue}, categoryId=${categoryId}, dataType=${dataType}`);
       return NextResponse.json({
         success: true,
@@ -147,21 +134,35 @@ export async function PUT(request: Request) {
       });
     }
 
-    // 4. G列（実績日）を今日の日付で更新
-    const today = new Date().toLocaleDateString('ja-JP'); // "2025/10/9"
-    const rowIndex = progressData.indexOf(targetRow) + 2; // +2はヘッダー行とインデックス調整
+    const processNo = targetProcess[1]; // B列: 工程No
+    const processName = targetProcess[2]; // C列: 工程名
 
-    await updateSheetCell(
-      spreadsheetId,
-      '進捗入力シート',
-      `G${rowIndex}`,
-      today
-    );
+    // 4. V2の actual-date API を使って実績日を更新
+    const today = new Date().toISOString().split('T')[0]; // "2025-10-22"
+
+    const apiUrl = new URL('/api/yumemaga-v2/actual-date', request.url);
+    const actualDateResponse = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        issue,
+        processNo,
+        actualDate: today,
+      }),
+    });
+
+    const actualDateResult = await actualDateResponse.json();
+
+    if (!actualDateResult.success) {
+      console.log(`実績日更新失敗: ${processNo}`);
+      return NextResponse.json({
+        success: true,
+        completedProcesses: [],
+        message: '実績日の更新に失敗しました',
+      });
+    }
 
     // 5. 完了通知を返す
-    const processNo = targetRow[0];
-    const processName = targetRow[1];
-
     console.log(`工程完了: ${processNo}: ${processName} (実績日: ${today})`);
 
     return NextResponse.json({

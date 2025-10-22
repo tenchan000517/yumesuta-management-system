@@ -321,8 +321,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // 10. カテゴリ別の進捗率を計算
-    const result = Object.keys(categories).map(cat => {
+    // 10. カテゴリ別の進捗率を計算（オブジェクト形式で返す）
+    const result: Record<string, any> = {};
+
+    Object.keys(categories).forEach(cat => {
       const processes = categories[cat];
       const total = processes.length;
       const completed = processes.filter((p: any) => p.actualDate).length;
@@ -335,8 +337,7 @@ export async function GET(request: Request) {
 
       console.log(`📋 カテゴリ${cat}: ${completed}/${total}工程完了 (${progressRate}%), ステータス: ${categoryConfirmationStatus}`);
 
-      return {
-        categoryId: cat,
+      result[cat] = {
         progress: progressRate,
         completed,
         total,
