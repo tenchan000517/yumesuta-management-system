@@ -199,36 +199,69 @@ function getProcessChecklist(processNo: string) {
   return [];
 }
 
-// 必要データ取得（Google Drive連携）
+// データ種別のマッピング（フォルダ名、ファイル拡張子、RequiredDataItemのtype）
+const DATA_TYPE_MAPPING: Record<string, { folderName: string; extensions: string[]; type: 'audio' | 'image' | 'document' | 'video' | 'other' }> = {
+  '録音データ': {
+    folderName: '録音データ',
+    extensions: ['.mp3', '.wav', '.m4a', '.aac'],
+    type: 'audio',
+  },
+  '写真データ': {
+    folderName: '写真データ',
+    extensions: ['.jpg', '.jpeg', '.png', '.gif', '.bmp'],
+    type: 'image',
+  },
+  '撮影データ': {
+    folderName: '撮影データ',
+    extensions: ['.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi'],
+    type: 'image', // 主に画像として扱う（動画も含む）
+  },
+  '情報シート': {
+    folderName: '情報シート',
+    extensions: ['.pdf', '.docx', '.xlsx', '.doc', '.xls'],
+    type: 'document',
+  },
+};
+
+// 必要データ取得（Google Drive連携）- 汎用化版
 async function getRequiredData(
   spreadsheetId: string,
   processNo: string,
   issue: string,
   categoryId: string
 ) {
-  // -2（データ提出）と-3（文字起こし）のみ対応
-  if (!processNo.endsWith('-2') && !processNo.endsWith('-3')) {
-    return []; // データ提出・文字起こし工程以外は空
-  }
-
   try {
-    // 1. カテゴリマスターからDriveフォルダIDを取得
+    // 1. カテゴリマスターから必要データ定義とDriveフォルダIDを取得
     const categoryMaster = await getSheetData(spreadsheetId, 'カテゴリマスター!A1:J100');
     const categoryRow = categoryMaster.slice(1).find(row => row[0] === categoryId);
 
-    if (!categoryRow || !categoryRow[9]) {
-      // DriveフォルダIDが見つからない場合はpendingで返す
-      const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
-      return [{
-        id: `${processNo}-d1`,
-        type: 'audio' as const,
-        name: dataName,
-        status: 'pending' as const,
-        optional: false,
-      }];
+    if (!categoryRow) {
+      // カテゴリが見つからない場合は空配列
+      return [];
     }
 
-    const driveFolderId = categoryRow[9]; // J列
+    const requiredDataDef = categoryRow[4]; // E列: 必要データ
+    const driveFolderId = categoryRow[9]; // J列: DriveフォルダID
+
+    // 必要データが未定義または"-"の場合は空配列
+    if (!requiredDataDef || requiredDataDef === '-') {
+      return [];
+    }
+
+    // DriveフォルダIDが未定義の場合は、pending状態で返す
+    if (!driveFolderId) {
+      const dataTypes = requiredDataDef.split(',').map((d: string) => d.trim());
+      return dataTypes.map((dataType: string, index: number) => {
+        const mapping = DATA_TYPE_MAPPING[dataType];
+        return {
+          id: `${processNo}-d${index + 1}`,
+          type: mapping?.type || 'other' as const,
+          name: dataType,
+          status: 'pending' as const,
+          optional: false,
+        };
+      });
+    }
 
     // 2. 月号フォーマット変換: "2025年11月号" → "2025_11"
     const issueFormatted = issue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
@@ -236,58 +269,86 @@ async function getRequiredData(
       return `${year}_${paddedMonth}`;
     });
 
-    // 3. フォルダパスを解決（存在しなければ作成）
-    const targetFolderId = await ensureDirectory(driveFolderId, ['録音データ', issueFormatted]);
+    // 3. 必要データ定義をパース（カンマ区切り）
+    const dataTypes = requiredDataDef.split(',').map((d: string) => d.trim());
 
-    // 4. フォルダ内のmp3ファイルを全て取得
-    const files = await listFilesInFolder(targetFolderId);
-    const mp3Files = files.filter(file =>
-      file.mimeType === 'audio/mpeg' ||
-      file.name?.toLowerCase().endsWith('.mp3')
-    );
+    // 4. 各データ種別ごとにファイルを取得
+    const results: any[] = [];
 
-    // 5. ファイルがない場合はpendingで返す
-    const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
+    for (const dataType of dataTypes) {
+      const mapping = DATA_TYPE_MAPPING[dataType];
 
-    if (mp3Files.length === 0) {
-      return [{
-        id: `${processNo}-d1`,
-        type: 'audio' as const,
-        name: dataName,
-        status: 'pending' as const,
-        optional: false,
-      }];
+      if (!mapping) {
+        // マッピングが定義されていないデータ種別はpending
+        results.push({
+          id: `${processNo}-d${results.length + 1}`,
+          type: 'other' as const,
+          name: dataType,
+          status: 'pending' as const,
+          optional: false,
+        });
+        continue;
+      }
+
+      try {
+        // フォルダパスを解決（存在しなければ作成）
+        const targetFolderId = await ensureDirectory(driveFolderId, [mapping.folderName, issueFormatted]);
+
+        // フォルダ内のファイルを全て取得
+        const files = await listFilesInFolder(targetFolderId);
+
+        // 拡張子でフィルタリング
+        const filteredFiles = files.filter(file => {
+          const fileName = file.name?.toLowerCase() || '';
+          return mapping.extensions.some(ext => fileName.endsWith(ext.toLowerCase()));
+        });
+
+        if (filteredFiles.length === 0) {
+          // ファイルがない場合はpending
+          results.push({
+            id: `${processNo}-d${results.length + 1}`,
+            type: mapping.type as const,
+            name: dataType,
+            status: 'pending' as const,
+            optional: false,
+          });
+        } else {
+          // 各ファイルをRequiredDataItemに変換
+          filteredFiles.forEach((file, index) => {
+            const fileSizeBytes = parseInt(file.size || '0', 10);
+            const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(1);
+
+            results.push({
+              id: `${processNo}-d${results.length + 1}`,
+              type: mapping.type as const,
+              name: dataType,
+              fileName: file.name || 'unknown',
+              fileSize: `${fileSizeMB} MB`,
+              status: 'submitted' as const,
+              driveUrl: file.webViewLink || undefined,
+              driveFileId: file.id || undefined,
+              optional: false,
+            });
+          });
+        }
+      } catch (error) {
+        console.error(`${dataType}取得エラー:`, error);
+        // エラー時はpending
+        results.push({
+          id: `${processNo}-d${results.length + 1}`,
+          type: mapping.type as const,
+          name: dataType,
+          status: 'pending' as const,
+          optional: false,
+        });
+      }
     }
 
-    // 6. 各ファイルをRequiredDataItemに変換（複数対応）
-    return mp3Files.map((file, index) => {
-      const fileSizeBytes = parseInt(file.size || '0', 10);
-      const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(1);
-
-      return {
-        id: `${processNo}-d1-${index + 1}`,
-        type: 'audio' as const,
-        name: dataName,
-        fileName: file.name || 'unknown.mp3',
-        fileSize: `${fileSizeMB} MB`,
-        status: 'submitted' as const, // ファイルが存在するのでsubmitted
-        driveUrl: file.webViewLink || undefined,
-        driveFileId: file.id || undefined,
-        optional: false,
-      };
-    });
+    return results;
 
   } catch (error) {
-    console.error('録音データ取得エラー:', error);
-    // エラー時はpendingで返す
-    const dataName = processNo.endsWith('-2') ? '録音データ' : '録音データ（前工程から）';
-    return [{
-      id: `${processNo}-d1`,
-      type: 'audio' as const,
-      name: dataName,
-      status: 'pending' as const,
-      optional: false,
-    }];
+    console.error('必要データ取得エラー:', error);
+    return [];
   }
 }
 
