@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData } from '@/lib/google-sheets';
 import { listFilesInFolder, ensureDirectory } from '@/lib/google-drive';
 import type { ProcessDetail } from '@/types/yumemaga-process';
 
 /**
- * 工程詳細取得API
+ * 工程詳細取得API (V2対応)
  * GET /api/yumemaga-v2/process-detail?issue=2025年11月号&processNo=A-3
+ *
+ * V2の変更点:
+ * - 進捗入力シート_V2（横持ち構造）から該当月号の1行のみ読み込み
+ * - 新工程マスター_V2から工程定義を取得
  */
 export async function GET(request: Request) {
   try {
@@ -22,57 +26,90 @@ export async function GET(request: Request) {
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. 進捗入力シートから工程情報を取得
-    const progressData = await getSheetData(spreadsheetId, '進捗入力シート!A1:J1000');
+    // 1. バッチで必要なシートを一括取得
+    const [processMasterData, progressDataV2, categoryMasterData] = await getBatchSheetData(
+      spreadsheetId,
+      [
+        '新工程マスター_V2!A1:F200',
+        '進捗入力シート_V2!A1:GV100',
+        'カテゴリマスター!A1:J100',
+      ]
+    );
 
-    if (progressData.length === 0) {
+    // 2. 新工程マスター_V2から工程情報を取得
+    const processMasterRow = processMasterData.slice(1).find(row => row[1] === processNo);
+
+    if (!processMasterRow) {
       return NextResponse.json(
-        { success: false, error: '進捗入力シートが見つかりません' },
+        { success: false, error: `工程${processNo}が工程マスターに見つかりません` },
         { status: 404 }
       );
     }
 
-    // 工程を検索（A列: 工程番号、D列: 月号）
-    const processRow = progressData
-      .slice(1)
-      .find(row => {
-        const rowProcessNo = row[0];
-        const rowIssue = row[3] || '';
-        const status = row[8] || 'active';
+    const processName = processMasterRow[2]; // C列: 工程名
+    const phase = processMasterRow[3]; // D列: フェーズ
+    const dataType = processMasterRow[5]; // F列: データ型
 
-        return (
-          rowProcessNo === processNo &&
-          (rowIssue === issue || !rowIssue) &&
-          (status === 'active' || !status)
-        );
-      });
-
-    if (!processRow) {
+    // 3. 進捗入力シート_V2から該当月号の行を取得
+    if (progressDataV2.length === 0) {
       return NextResponse.json(
-        { success: false, error: `工程${processNo}が見つかりません` },
+        { success: false, error: '進捗入力シート_V2が見つかりません' },
         { status: 404 }
       );
     }
+
+    const progressHeaders = progressDataV2[0];
+    const progressRow = progressDataV2.slice(1).find(row => row[0] === issue);
+
+    if (!progressRow) {
+      return NextResponse.json(
+        { success: false, error: `月号 ${issue} の進捗データが見つかりません` },
+        { status: 404 }
+      );
+    }
+
+    // 4. ヘッダー行から列マッピングを作成
+    let plannedCol = -1;
+    let actualCol = -1;
+
+    for (let col = 1; col < progressHeaders.length; col++) {
+      const header = progressHeaders[col];
+      if (!header) continue;
+
+      const match = header.match(/^([A-Z]-\d+)(予定|実績.*)/);
+      if (match && match[1] === processNo) {
+        const type = match[2];
+        if (type === '予定') {
+          plannedCol = col;
+        } else if (type.startsWith('実績')) {
+          actualCol = col;
+        }
+      }
+    }
+
+    // 5. 予定日と実績日を取得
+    const plannedDate = plannedCol >= 0 ? (progressRow[plannedCol] || '-') : '-';
+    const actualDate = actualCol >= 0 ? (progressRow[actualCol] || undefined) : undefined;
 
     // カテゴリIDを抽出（例: A-3 → A）
     const categoryId = processNo.split('-')[0];
 
-    // 2. 工程詳細を構築
+    // 6. 工程詳細を構築
     const processDetail: ProcessDetail = {
-      processNo: processRow[0],                    // A列: 工程番号
-      processName: processRow[1],                  // B列: 工程名
-      categoryId: categoryId,
+      processNo,
+      processName,
+      categoryId,
       categoryName: getCategoryName(categoryId),
-      issue: issue,
-      overview: getProcessOverview(processNo),     // 工程概要（モックデータ）
-      plannedDate: processRow[4] || '-',           // E列: 逆算予定日
-      actualDate: processRow[6] || undefined,      // G列: 実績日
-      status: determineStatus(processRow[4], processRow[6]),
-      delayDays: calculateDelayDays(processRow[4], processRow[6]),
-      checklist: getProcessChecklist(processNo),   // チェックリスト（モックデータ）
-      requiredData: await getRequiredData(spreadsheetId, processNo, issue, categoryId),     // 必要データ（Google Drive連携）
-      deliverables: getDeliverables(processNo),    // 成果物（モックデータ）
-      guides: getGuides(processNo),                // ガイドリンク（モックデータ）
+      issue,
+      overview: getProcessOverview(processNo),
+      plannedDate,
+      actualDate,
+      status: determineStatus(plannedDate, actualDate),
+      delayDays: calculateDelayDays(plannedDate, actualDate),
+      checklist: getProcessChecklist(processNo),
+      requiredData: await getRequiredData(spreadsheetId, processNo, issue, categoryId),
+      deliverables: getDeliverables(processNo),
+      guides: getGuides(processNo),
     };
 
     return NextResponse.json({
