@@ -255,7 +255,8 @@ export function CategoryManagementSection({
             const lastProcess = category.processes[category.processes.length - 1];
             // 最後の工程の予定日が今日より前で、まだ完了していない場合は遅延
             const isDelayedCategory = lastProcess && !lastProcess.actualDate && (() => {
-              if (!lastProcess.plannedDate || lastProcess.plannedDate === '-') return false;
+              // 文字列型チェック追加
+              if (typeof lastProcess.plannedDate !== 'string' || !lastProcess.plannedDate || lastProcess.plannedDate === '-') return false;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               const [month, day] = lastProcess.plannedDate.split('/').map(Number);
