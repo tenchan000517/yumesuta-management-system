@@ -36,6 +36,7 @@ export interface NextMonthPrepSectionProps {
   onUpdateActualDate: (processNo: string, date: string) => Promise<void>;
   onUpdateCompanyActualDate?: (processNo: string, date: string) => Promise<void>;
   onUpdateCompanyPlannedDate?: (processNo: string, date: string) => Promise<void>;
+  onProcessDetail?: (processNo: string) => void; // 工程詳細表示
 }
 
 export interface NextMonthProgressSummaryProps {
@@ -56,4 +57,5 @@ export interface NextMonthCategoryCardProps {
   expanded: boolean;
   onToggleExpand: () => void;
   onUpdateActualDate: (processNo: string, date: string) => Promise<void>;
+  onProcessDetail?: (processNo: string) => void; // 工程詳細表示
 }

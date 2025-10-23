@@ -63,7 +63,8 @@ export function NextMonthPrepSection({
   onRefresh,
   onUpdateActualDate,
   onUpdateCompanyActualDate,
-  onUpdateCompanyPlannedDate
+  onUpdateCompanyPlannedDate,
+  onProcessDetail
 }: NextMonthPrepSectionProps) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -162,6 +163,7 @@ export function NextMonthPrepSection({
                 setExpandedCategory(expandedCategory === category.id ? null : category.id)
               }
               onUpdateActualDate={onUpdateActualDate}
+              onProcessDetail={onProcessDetail}
             />
           ))}
         </div>

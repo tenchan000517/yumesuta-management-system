@@ -4,7 +4,8 @@ export function NextMonthCategoryCard({
   category,
   expanded,
   onToggleExpand,
-  onUpdateActualDate
+  onUpdateActualDate,
+  onProcessDetail
 }: NextMonthCategoryCardProps) {
 
   const getStatusBadge = (status: 'completed' | 'in_progress' | 'not_started') => {
@@ -123,19 +124,29 @@ export function NextMonthCategoryCard({
                   </div>
                   <div className="ml-2">{getStatusBadge(process.status)}</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-gray-600 flex-shrink-0">実績日:</label>
-                  <input
-                    type="text"
-                    placeholder="MM/DD"
-                    defaultValue={process.actualDate}
-                    onBlur={(e) => {
-                      if (e.target.value !== process.actualDate) {
-                        onUpdateActualDate(process.processNo, e.target.value);
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600 flex-shrink-0">実績日:</label>
+                    <input
+                      type="text"
+                      placeholder="MM/DD"
+                      defaultValue={process.actualDate}
+                      onBlur={(e) => {
+                        if (e.target.value !== process.actualDate) {
+                          onUpdateActualDate(process.processNo, e.target.value);
+                        }
+                      }}
+                      className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {onProcessDetail && (
+                    <button
+                      onClick={() => onProcessDetail(process.processNo)}
+                      className="w-full px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors font-semibold"
+                    >
+                      詳細
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

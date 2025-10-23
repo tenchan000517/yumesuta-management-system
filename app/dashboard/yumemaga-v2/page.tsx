@@ -1000,9 +1000,11 @@ export default function YumeMagaV2Page() {
               task.taskId === 'preparation-data-submission'
             )
           })).filter(company => company.tasks.length > 0) : []}
+          onRefresh={loadData}
           onUpdateActualDate={handleNextMonthUpdateActualDate}
           onUpdateCompanyActualDate={handleUpdateActualDate}
           onUpdateCompanyPlannedDate={handleUpdatePlannedDate}
+          onProcessDetail={handleProcessDetail}
         />
 
         {/* カテゴリ別予実管理 */}

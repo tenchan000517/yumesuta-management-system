@@ -76,6 +76,12 @@ export function ProcessSidePanel({
   const [pageList, setPageList] = useState<string[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
 
+  // 準備工程（次月号準備）用のstate
+  const [preliminaryFormatPreview, setPreliminaryFormatPreview] = useState('');
+  const [completionFormatPreview, setCompletionFormatPreview] = useState('');
+  const [reportInput, setReportInput] = useState('');
+  const [parsedData, setParsedData] = useState<any>(null);
+
   // コマンド自動生成
   const { generatedCommand, outputPath } = useMemo(() => {
     if (!filePath) return { generatedCommand: '', outputPath: '' };
@@ -336,6 +342,217 @@ ${htmlSource || '（HTMLソースを貼り付けてください）'}
       alert('❌ 保存に失敗しました');
     } finally {
       setIsSavingDocument(false);
+    }
+  };
+
+  // 準備工程用: 事前報告フォーマット生成
+  const handleGeneratePreliminaryFormat = async () => {
+    try {
+      const res = await fetch('/api/yumemaga-v2/interview-templates');
+      const data = await res.json();
+
+      if (!data.success) {
+        alert('テンプレート取得に失敗しました');
+        return;
+      }
+
+      const categoryId = process.processNo.split('-')[0];
+      const template = data.templates.find((t: any) => t.categoryId === categoryId);
+
+      if (!template) {
+        alert('テンプレートが見つかりませんでした');
+        return;
+      }
+
+      // Googleフォームの場合
+      if (template.useGoogleForm) {
+        const format = `【${template.interviewName} 報告】
+
+■ インタビュー名: ${template.interviewName}
+■ 月号: ${issue}
+■ 形式: Googleフォーム
+■ 〆切: ${process.plannedDate}
+
+以下のフォームを提出してください：
+${template.googleFormUrl}
+
+━━━ フォーム提出後、以下を報告してください ━━━
+
+■ 提出完了日: [     ]`;
+
+        setPreliminaryFormatPreview(format);
+        navigator.clipboard.writeText(format);
+        alert('フォーマットをクリップボードにコピーしました');
+        return;
+      }
+
+      // 通常のインタビューの場合
+      const format = `【${template.interviewName} 事前報告】
+
+■ インタビュー名: ${template.interviewName}
+■ 月号: ${issue}
+■ 〆切: ${process.plannedDate}
+
+━━━ 以下を埋めて報告してください ━━━
+
+■ アポステータス: [アポ未確定 / アポ確定]
+
+[アポ未確定の場合]
+■ 次回連絡予定日: [     ]
+
+[アポ確定の場合]
+■ アポ確定日: [     ]
+■ インタビュー予定日: [     ]
+
+■ 予定質問内容:
+[        ]
+
+■ インタビュー予定時間:
+[        ]
+
+■ オンライン/対面:
+[        ]
+
+■ 予定画像形式: [任意]
+[        ]
+
+■ 予定データ形式: [任意]
+[        ]`;
+
+      setPreliminaryFormatPreview(format);
+      navigator.clipboard.writeText(format);
+      alert('フォーマットをクリップボードにコピーしました');
+    } catch (error) {
+      console.error('フォーマット生成エラー:', error);
+      alert('フォーマット生成に失敗しました');
+    }
+  };
+
+  // 準備工程用: 実施報告フォーマット生成
+  const handleGenerateCompletionFormat = async () => {
+    try {
+      const res = await fetch('/api/yumemaga-v2/interview-templates');
+      const data = await res.json();
+
+      if (!data.success) {
+        alert('テンプレート取得に失敗しました');
+        return;
+      }
+
+      const categoryId = process.processNo.split('-')[0];
+      const template = data.templates.find((t: any) => t.categoryId === categoryId);
+
+      if (!template) {
+        alert('テンプレートが見つかりませんでした');
+        return;
+      }
+
+      const format = `【${template.interviewName} 実施報告】
+
+■ インタビュー名: ${template.interviewName}
+■ 月号: ${issue}
+
+━━━ 以下を埋めて報告してください ━━━
+
+■ 実施日: [     ]
+■ データ提出予定日: [     ]
+
+■ インタビュワーのこだわり: [任意]
+[        ]
+（例: 昔の中高時代の黒歴史のところはがっつり削って大丈夫。
+高校生へのメッセージを強く聞く取材にしたし、本人もポイントを
+しっかり押さえてほしいとのことだった。）`;
+
+      setCompletionFormatPreview(format);
+      navigator.clipboard.writeText(format);
+      alert('フォーマットをクリップボードにコピーしました');
+    } catch (error) {
+      console.error('フォーマット生成エラー:', error);
+      alert('フォーマット生成に失敗しました');
+    }
+  };
+
+  // 準備工程用: 報告パース・保存
+  const handleParseReport = async () => {
+    try {
+      const lines = reportInput.split('\n');
+
+      const parsed: any = {
+        appointmentStatus: '',
+        appointmentConfirmedDate: '',
+        interviewScheduledDate: '',
+        plannedQuestions: '',
+        plannedDuration: '',
+        format: '',
+        imageFormat: '',
+        dataFormat: '',
+        actualDate: '',
+        dataSubmissionDate: '',
+        interviewerRequests: '',
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.includes('■ アポステータス:')) {
+          parsed.appointmentStatus = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ アポ確定日:')) {
+          parsed.appointmentConfirmedDate = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ インタビュー予定日:')) {
+          parsed.interviewScheduledDate = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ 予定質問内容:')) {
+          let questions = '';
+          for (let j = i + 1; j < lines.length; j++) {
+            if (lines[j].includes('■')) break;
+            questions += lines[j] + '\n';
+          }
+          parsed.plannedQuestions = questions.trim();
+        } else if (line.includes('■ インタビュー予定時間:')) {
+          parsed.plannedDuration = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ オンライン/対面:')) {
+          parsed.format = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ 予定画像形式:')) {
+          parsed.imageFormat = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ 予定データ形式:')) {
+          parsed.dataFormat = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ 実施日:')) {
+          parsed.actualDate = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ データ提出予定日:')) {
+          parsed.dataSubmissionDate = line.split(':')[1]?.trim() || '';
+        } else if (line.includes('■ インタビュワーのこだわり:')) {
+          let requests = '';
+          for (let j = i + 1; j < lines.length; j++) {
+            if (lines[j].includes('■') || lines[j].includes('━')) break;
+            requests += lines[j] + '\n';
+          }
+          parsed.interviewerRequests = requests.trim();
+        }
+      }
+
+      setParsedData(parsed);
+
+      // データ保存
+      const categoryId = process.processNo.split('-')[0];
+      const saveRes = await fetch('/api/yumemaga-v2/interview-data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue: issue,
+          categoryId: categoryId,
+          data: parsed,
+        }),
+      });
+
+      const saveData = await saveRes.json();
+      if (saveData.success) {
+        alert('報告を保存しました');
+        setReportInput('');
+      } else {
+        alert(`保存に失敗しました: ${saveData.error}`);
+      }
+    } catch (error) {
+      console.error('パースエラー:', error);
+      alert('パースに失敗しました');
     }
   };
 
@@ -959,6 +1176,118 @@ ${htmlSource || '（HTMLソースを貼り付けてください）'}
                 </ul>
               </div>
             </section>
+          )}
+
+          {/* 準備工程（次月号準備）のコンテンツ */}
+          {process.processNo.endsWith('-1') && (
+            <>
+              {/* 事前報告フォーマット生成 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-green-600" />
+                  事前報告フォーマット生成
+                </h3>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                  <p className="text-sm text-gray-700">
+                    インタビュワーに送る事前報告フォーマットを生成します。
+                  </p>
+
+                  <button
+                    onClick={handleGeneratePreliminaryFormat}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
+                  >
+                    <Copy className="w-4 h-4" />
+                    事前報告フォーマットをコピー
+                  </button>
+
+                  {preliminaryFormatPreview && (
+                    <div className="bg-white border border-green-300 rounded-lg p-3">
+                      <p className="text-xs text-green-900 font-semibold mb-2">
+                        プレビュー:
+                      </p>
+                      <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                        {preliminaryFormatPreview}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* 実施報告フォーマット生成 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  実施報告フォーマット生成
+                </h3>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                  <p className="text-sm text-gray-700">
+                    インタビュー実施後の報告フォーマットを生成します。
+                  </p>
+
+                  <button
+                    onClick={handleGenerateCompletionFormat}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold"
+                  >
+                    <Copy className="w-4 h-4" />
+                    実施報告フォーマットをコピー
+                  </button>
+
+                  {completionFormatPreview && (
+                    <div className="bg-white border border-blue-300 rounded-lg p-3">
+                      <p className="text-xs text-blue-900 font-semibold mb-2">
+                        プレビュー:
+                      </p>
+                      <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                        {completionFormatPreview}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* 報告受領 */}
+              <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-purple-600" />
+                  報告受領
+                </h3>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <p className="text-sm text-gray-700">
+                    インタビュワーから受け取った報告をコピペしてください。
+                  </p>
+
+                  <textarea
+                    value={reportInput}
+                    onChange={(e) => setReportInput(e.target.value)}
+                    placeholder="【メインインタビュー 事前報告】\n\n■ インタビュー名: メインインタビュー\n..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm resize-y min-h-[200px] font-mono"
+                  />
+
+                  <button
+                    onClick={handleParseReport}
+                    disabled={!reportInput.trim()}
+                    className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FileText className="w-4 h-4" />
+                    パースして保存
+                  </button>
+
+                  {parsedData && (
+                    <div className="bg-white border border-purple-300 rounded-lg p-3">
+                      <p className="text-xs text-purple-900 font-semibold mb-2">
+                        パース結果:
+                      </p>
+                      <pre className="text-xs text-gray-800 whitespace-pre-wrap">
+                        {JSON.stringify(parsedData, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
           )}
 
           {/* B-3工程: アンケートフォーム作成ガイド */}
