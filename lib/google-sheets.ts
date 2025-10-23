@@ -204,6 +204,7 @@ export async function getSheetData(
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
+      valueRenderOption: 'UNFORMATTED_VALUE',
     });
 
     const data = response.data.values || [];
@@ -268,6 +269,7 @@ export async function getBatchSheetData(
       const response = await sheets.spreadsheets.values.batchGet({
         spreadsheetId,
         ranges: uncachedRanges,
+        valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const fetchedData = response.data.valueRanges?.map((vr) => vr.values || []) || [];
