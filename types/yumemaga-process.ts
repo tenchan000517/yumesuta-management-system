@@ -35,6 +35,9 @@ export interface ProcessDetail {
 
   // メモ
   notes?: string;                 // メモ
+
+  // インタビュー連携（準備工程→内容整理工程）
+  interviewerRequests?: string;   // インタビュワーのこだわり（準備工程から取得）
 }
 
 export interface ChecklistItem {

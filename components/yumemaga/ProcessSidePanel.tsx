@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   X,
   ExternalLink,
@@ -81,6 +81,13 @@ export function ProcessSidePanel({
   const [completionFormatPreview, setCompletionFormatPreview] = useState('');
   const [reportInput, setReportInput] = useState('');
   const [parsedData, setParsedData] = useState<any>(null);
+
+  // 内容整理工程で、準備工程からのデータがある場合は自動セット
+  useEffect(() => {
+    if (process?.processNo.endsWith('-4') && process?.interviewerRequests) {
+      setInterviewerRequests(process.interviewerRequests);
+    }
+  }, [process]);
 
   // コマンド自動生成
   const { generatedCommand, outputPath } = useMemo(() => {
@@ -1006,6 +1013,19 @@ ${template.googleFormUrl}
                   A-3工程で生成された文字起こしテキストファイルのパスを入力してください
                 </p>
               </div>
+
+              {/* 準備工程から自動読み込み通知 */}
+              {process.interviewerRequests && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                  <p className="text-xs text-green-900 font-semibold mb-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    準備工程から自動読み込みしました
+                  </p>
+                  <p className="text-xs text-green-700">
+                    {process.categoryId}-1（準備工程）で入力されたインタビュワーのこだわりが下の欄に自動的に読み込まれています。必要に応じて編集してください。
+                  </p>
+                </div>
+              )}
 
               {/* インタビュワー要望入力 */}
               <div className="mb-3">

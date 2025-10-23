@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getBatchSheetData } from '@/lib/google-sheets';
+import { getBatchSheetData, getSheetData } from '@/lib/google-sheets';
 import { listFilesInFolder, ensureDirectory } from '@/lib/google-drive';
 import type { ProcessDetail } from '@/types/yumemaga-process';
 
@@ -111,6 +111,39 @@ export async function GET(request: Request) {
       deliverables: getDeliverables(processNo),
       guides: getGuides(processNo),
     };
+
+    // 内容整理工程（-4で終わる工程）の場合、準備工程のデータを取得
+    if (processNo.endsWith('-4') && processName.includes('内容整理')) {
+      try {
+        // 同じカテゴリの準備工程（-1）のデータを取得
+        const preparationProcessNo = `${categoryId}-1`;
+
+        const interviewDataSheet = await getSheetData(
+          spreadsheetId,
+          'インタビュー実績データ!A1:H100'
+        );
+
+        const row = interviewDataSheet.find((r: any[]) => r[0] === issue);
+
+        const categoryColumnMap: Record<string, number> = {
+          'A': 1, 'K': 2, 'H': 3, 'I': 4, 'L': 5, 'M': 6, 'C': 7,
+        };
+
+        const columnIndex = categoryColumnMap[categoryId];
+        const interviewData = row && row[columnIndex]
+          ? JSON.parse(row[columnIndex])
+          : null;
+
+        // 「インタビュワーのこだわり」を取得
+        const interviewerRequests = interviewData?.interviewerRequests || '';
+
+        // ProcessDetailに追加
+        processDetail.interviewerRequests = interviewerRequests;
+      } catch (error) {
+        console.error('インタビュー実績データ取得エラー:', error);
+        // エラーが発生しても処理は続行
+      }
+    }
 
     return NextResponse.json({
       success: true,
