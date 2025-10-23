@@ -202,7 +202,8 @@ function calculateDelayDays(plannedDate: string, actualDate: string): number | u
 
 // 日付パース
 function parseDate(dateStr: string): Date | null {
-  if (!dateStr || dateStr === '-') return null;
+  // 文字列でない場合は早期リターン
+  if (typeof dateStr !== 'string' || !dateStr || dateStr === '-') return null;
 
   const parts = dateStr.split('/');
   if (parts.length !== 2 && parts.length !== 3) return null;
