@@ -1,6 +1,7 @@
 import { NextMonthPrepSectionProps, NextMonthCategory } from '@/types/next-month';
 import { NextMonthProgressSummary } from './NextMonthProgressSummary';
 import { NextMonthCategoryCard } from './NextMonthCategoryCard';
+import { ContractManagementSection } from './ContractManagementSection';
 import { Calendar, RefreshCw, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
@@ -9,6 +10,7 @@ export function NextMonthPrepSection({
   processes,
   companyPrepTasks,
   categoryMetadata = [],
+  contractManagementData,
   onRefresh,
   onUpdateActualDate,
   onUpdateCompanyActualDate,
@@ -241,6 +243,14 @@ export function NextMonthPrepSection({
             )}
           </div>
         </>
+      )}
+
+      {/* 契約管理セクション */}
+      {contractManagementData && (
+        <ContractManagementSection
+          newCompanies={contractManagementData.newCompanies}
+          renewalReminders={contractManagementData.renewalReminders}
+        />
       )}
     </section>
   );

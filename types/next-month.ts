@@ -1,5 +1,7 @@
 // 次月号準備工程の型定義
 
+import type { ContractManagementData } from './contract';
+
 export type NextMonthProcessStatus = 'completed' | 'in_progress' | 'not_started';
 
 export interface NextMonthProcessData {
@@ -33,6 +35,7 @@ export interface NextMonthPrepSectionProps {
   processes: NextMonthProcessData[];
   companyPrepTasks?: any[]; // 企業別準備タスク
   categoryMetadata?: any[]; // カテゴリマスターデータ
+  contractManagementData?: ContractManagementData; // 契約管理データ
   onRefresh: () => void;
   onUpdateActualDate: (processNo: string, date: string) => Promise<void>;
   onUpdateCompanyActualDate?: (processNo: string, date: string) => Promise<void>;

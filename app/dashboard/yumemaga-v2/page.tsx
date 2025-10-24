@@ -22,6 +22,7 @@ import { CompanyManagementSection } from '@/components/company-management/Compan
 import { CompanyPageProductionSection } from '@/components/company-page-production/CompanyPageProductionSection';
 import { ProcessSidePanel } from '@/components/yumemaga/ProcessSidePanel';
 import type { ProcessDetail } from '@/types/yumemaga-process';
+import type { ContractManagementData } from '@/types/contract';
 
 export default function YumeMagaV2Page() {
   const [publishDate, setPublishDate] = useState('');
@@ -41,6 +42,7 @@ export default function YumeMagaV2Page() {
   const [delayedProcessesMap, setDelayedProcessesMap] = useState<Record<string, number>>({}); // Phase 2: 遅延工程
   const [companies, setCompanies] = useState<any[]>([]); // 企業セクション
   const [companyPageProduction, setCompanyPageProduction] = useState<any>(null); // 企業別ページ制作進捗
+  const [contractManagementData, setContractManagementData] = useState<ContractManagementData | null>(null); // 契約管理データ
   const [loading, setLoading] = useState(false);
   const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; message: string } | null>(null);
 
@@ -131,6 +133,24 @@ export default function YumeMagaV2Page() {
           actualDate: p.actualDate || '',
           status: p.actualDate ? 'completed' : 'not_started' as const,
         })));
+
+        // 契約管理データ取得（次月号の年月を使用）
+        const issueMatch = nextMonthData.issue.match(/(\d{4})年(\d{1,2})月号/);
+        if (issueMatch) {
+          const targetYear = parseInt(issueMatch[1], 10);
+          const targetMonth = parseInt(issueMatch[2], 10);
+          try {
+            const contractRes = await fetch(
+              `/api/yumemaga-v2/contract-management?targetYear=${targetYear}&targetMonth=${targetMonth}`
+            );
+            const contractData = await contractRes.json();
+            if (contractData.success) {
+              setContractManagementData(contractData.data);
+            }
+          } catch (error) {
+            console.error('Failed to fetch contract management data:', error);
+          }
+        }
       }
 
       // Phase 2: 準備OK・遅延工程の取得
@@ -990,6 +1010,7 @@ export default function YumeMagaV2Page() {
           nextMonthIssue={nextMonthIssue}
           processes={nextMonthProcesses}
           categoryMetadata={categoryMetadata}
+          contractManagementData={contractManagementData || undefined}
           companyPrepTasks={companyPageProduction ? [
             ...(companyPageProduction.newCompanies || []),
             ...(companyPageProduction.updatedCompanies || [])
