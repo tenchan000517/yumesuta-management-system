@@ -81,6 +81,7 @@ export function ProcessSidePanel({
   const [completionFormatPreview, setCompletionFormatPreview] = useState('');
   const [reportInput, setReportInput] = useState('');
   const [parsedData, setParsedData] = useState<any>(null);
+  const [interviewMode, setInterviewMode] = useState<'form' | 'direct'>('form'); // STAR用: フォーム or 直接インタビュー
 
   // 内容整理工程で、準備工程からのデータがある場合は自動セット
   useEffect(() => {
@@ -371,8 +372,12 @@ ${htmlSource || '（HTMLソースを貼り付けてください）'}
         return;
       }
 
+      // STARカテゴリ（H, I）の場合は、interviewModeで判定
+      const isStarCategory = categoryId === 'H' || categoryId === 'I';
+      const shouldUseForm = isStarCategory ? interviewMode === 'form' : template.useGoogleForm;
+
       // Googleフォームの場合
-      if (template.useGoogleForm) {
+      if (shouldUseForm) {
         const format = `【${template.interviewName} 報告】
 
 ■ インタビュー名: ${template.interviewName}
@@ -393,7 +398,7 @@ ${template.googleFormUrl}
         return;
       }
 
-      // 通常のインタビューの場合
+      // 直接インタビューの場合
       const format = `【${template.interviewName} 事前報告】
 
 ■ インタビュー名: ${template.interviewName}
@@ -1209,6 +1214,32 @@ ${template.googleFormUrl}
                 </h3>
 
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                  {/* STARカテゴリ（H, I）の場合のみタブ表示 */}
+                  {(process.categoryId === 'H' || process.categoryId === 'I') && (
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() => setInterviewMode('form')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                          interviewMode === 'form'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        フォーム形式
+                      </button>
+                      <button
+                        onClick={() => setInterviewMode('direct')}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                          interviewMode === 'direct'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        直接インタビュー
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-sm text-gray-700">
                     インタビュワーに送る事前報告フォーマットを生成します。
                   </p>
