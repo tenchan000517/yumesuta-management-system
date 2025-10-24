@@ -4,62 +4,11 @@ import { NextMonthCategoryCard } from './NextMonthCategoryCard';
 import { Calendar, RefreshCw, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
-// カテゴリ定義
-const categoryDefinitions = [
-  {
-    id: 'PREP',
-    name: '企画・準備',
-    icon: '',
-    processNos: ['S-1', 'S-2']
-  },
-  {
-    id: 'A',
-    name: 'メイン(A)',
-    icon: '',
-    processNos: ['A-1']
-  },
-  {
-    id: 'K',
-    name: 'インタビュー②(K)',
-    icon: '',
-    processNos: ['K-1']
-  },
-  {
-    id: 'L',
-    name: '学校取材①(L)',
-    icon: '',
-    processNos: ['L-1', 'L-2', 'L-3']
-  },
-  {
-    id: 'M',
-    name: '学校取材②(M)',
-    icon: '',
-    processNos: ['M-1', 'M-2', 'M-3']
-  },
-  {
-    id: 'H',
-    name: 'STAR①(H)',
-    icon: '',
-    processNos: ['H-1']
-  },
-  {
-    id: 'I',
-    name: 'STAR②(I)',
-    icon: '',
-    processNos: ['I-1']
-  },
-  {
-    id: 'C',
-    name: '新規企業①(C)',
-    icon: '',
-    processNos: ['C-1', 'C-3']
-  }
-];
-
 export function NextMonthPrepSection({
   nextMonthIssue,
   processes,
   companyPrepTasks,
+  categoryMetadata = [],
   onRefresh,
   onUpdateActualDate,
   onUpdateCompanyActualDate,
@@ -81,29 +30,40 @@ export function NextMonthPrepSection({
     }
   };
 
-  // 工程データをカテゴリ単位に集約
+  // 工程データをカテゴリ単位に集約（カテゴリマスターから動的に生成）
   const categories: NextMonthCategory[] = useMemo(() => {
-    return categoryDefinitions.map(catDef => {
-      const categoryProcesses = processes.filter(p =>
-        catDef.processNos.includes(p.processNo)
-      );
+    // processesからカテゴリIDを抽出（A-1 → A, K-1 → K）
+    const categoryIds = Array.from(new Set(
+      processes.map(p => {
+        const match = p.processNo.match(/^([A-Z]+)-/);
+        return match ? match[1] : null;
+      }).filter(Boolean) as string[]
+    ));
+
+    return categoryIds.map(catId => {
+      // カテゴリマスターからカテゴリ名を取得
+      const categoryMeta = categoryMetadata.find((c: any) => c.categoryId === catId);
+      const categoryName = categoryMeta?.categoryName || catId;
+
+      // このカテゴリに属する工程を抽出
+      const categoryProcesses = processes.filter(p => p.processNo.startsWith(`${catId}-`));
 
       const completed = categoryProcesses.filter(p => p.status === 'completed').length;
       const total = categoryProcesses.length;
       const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
       return {
-        id: catDef.id,
-        name: catDef.name,
-        icon: catDef.icon,
-        processNos: catDef.processNos,
+        id: catId,
+        name: categoryName,
+        icon: '',
+        processNos: categoryProcesses.map(p => p.processNo),
         progress,
         completed,
         total,
         processes: categoryProcesses
       };
     });
-  }, [processes]);
+  }, [processes, categoryMetadata]);
 
   // 次月号工程が存在しない場合は非表示
   if (!processes || processes.length === 0) {

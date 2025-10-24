@@ -989,6 +989,7 @@ export default function YumeMagaV2Page() {
           currentMonthIssue={selectedIssue}
           nextMonthIssue={nextMonthIssue}
           processes={nextMonthProcesses}
+          categoryMetadata={categoryMetadata}
           companyPrepTasks={companyPageProduction ? [
             ...(companyPageProduction.newCompanies || []),
             ...(companyPageProduction.updatedCompanies || [])
