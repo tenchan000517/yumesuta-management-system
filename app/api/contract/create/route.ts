@@ -29,9 +29,12 @@ export async function POST(request: Request) {
     const normalizedInputName = normalizeCompanyName(parsedData.companyName);
     const companyInMaster = companyMasterData.data.values
       ?.slice(1)
-      .find(row =>
-        normalizeCompanyName(row[22]) === normalizedInputName // W列: 顧客マスタ企業名
-      );
+      .find(row => {
+        // B列（企業正式名称）で検索し、W列（顧客マスタ企業名）がある場合はそちらも検索
+        const normalizedBColumn = normalizeCompanyName(row[1] || '');
+        const normalizedWColumn = normalizeCompanyName(row[22] || '');
+        return normalizedBColumn === normalizedInputName || normalizedWColumn === normalizedInputName;
+      });
 
     if (!companyInMaster) {
       return NextResponse.json(

@@ -74,6 +74,10 @@ export async function getAuthenticatedDriveClient() {
       oauth2Client.setCredentials(credentials);
     } catch (error) {
       console.error('Failed to refresh token:', error);
+      // トークンが無効な場合はファイルを削除して再認証を促す
+      if (fs.existsSync(TOKEN_PATH)) {
+        fs.unlinkSync(TOKEN_PATH);
+      }
       throw new Error('Token refresh failed. Please re-authenticate.');
     }
   }
@@ -83,7 +87,22 @@ export async function getAuthenticatedDriveClient() {
 
 /**
  * 認証状態をチェック
+ * トークンファイルの存在と基本的な有効性を確認
  */
 export function isAuthenticated(): boolean {
-  return fs.existsSync(TOKEN_PATH);
+  if (!fs.existsSync(TOKEN_PATH)) {
+    return false;
+  }
+
+  try {
+    const tokens = loadTokens();
+    if (!tokens || !tokens.refresh_token) {
+      // トークンファイルが壊れている、またはリフレッシュトークンがない
+      return false;
+    }
+    return true;
+  } catch (error) {
+    // トークンファイルが読み込めない場合は未認証扱い
+    return false;
+  }
 }

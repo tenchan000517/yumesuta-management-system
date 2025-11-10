@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/google-sheets';
 import { uploadFileWithOAuth, ensureDirectoryWithOAuth } from '@/lib/google-drive';
 import type {
-  FileUploadRequest,
   FileUploadResponse,
   DataType,
   CompanyFolderType,
@@ -69,8 +68,17 @@ async function handleCategoryUpload(
   const dataType = formData.get('dataType') as DataType;
   const issue = formData.get('issue') as string; // "2025_11"
 
+  // デバッグログ
+  console.log('=== Category Upload Debug ===');
+  console.log('categoryId:', categoryId);
+  console.log('dataType:', dataType);
+  console.log('issue:', issue);
+  console.log('files count:', files.length);
+  console.log('All formData keys:', Array.from(formData.keys()));
+
   // バリデーション
   if (!categoryId || !dataType || !issue) {
+    console.error('Validation failed:', { categoryId, dataType, issue });
     return NextResponse.json(
       { success: false, error: 'categoryId, dataType, and issue are required' },
       { status: 400 }

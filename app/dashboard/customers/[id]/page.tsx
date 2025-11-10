@@ -138,7 +138,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const statusBadge = getStatusBadge(editMode ? editedData.status : company.status);
-  const displayData = editMode ? editedData : company;
+  const displayData = (editMode ? editedData : company) as YumeMagaCompany;
 
   return (
     <div className="min-h-screen bg-gray-50">

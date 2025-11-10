@@ -21,13 +21,13 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: true,
         data: {
-          spreadsheetTitle: metadata.properties.title,
-          sheets: metadata.sheets.map((sheet: any) => ({
-            title: sheet.properties.title,
-            sheetId: sheet.properties.sheetId,
-            index: sheet.properties.index,
-            rowCount: sheet.properties.gridProperties?.rowCount,
-            columnCount: sheet.properties.gridProperties?.columnCount,
+          spreadsheetTitle: metadata.properties?.title || '',
+          sheets: (metadata.sheets || []).map((sheet: any) => ({
+            title: sheet.properties?.title || '',
+            sheetId: sheet.properties?.sheetId || 0,
+            index: sheet.properties?.index || 0,
+            rowCount: sheet.properties?.gridProperties?.rowCount,
+            columnCount: sheet.properties?.gridProperties?.columnCount,
           })),
         },
       });

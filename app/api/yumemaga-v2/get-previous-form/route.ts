@@ -138,7 +138,7 @@ async function findFolderIdByPath(
       file.name === segment && file.mimeType === 'application/vnd.google-apps.folder'
     );
 
-    if (!folder) {
+    if (!folder || !folder.id) {
       return null;
     }
 

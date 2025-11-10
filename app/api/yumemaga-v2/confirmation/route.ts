@@ -2,22 +2,22 @@ import { NextResponse } from 'next/server';
 import { getSheetData, updateSheetData } from '@/lib/google-sheets';
 
 /**
- * ºØJSONô°API (V2şÜ)
+ * ç¢ºèªJSONç®¡ç†API (V2ç‰ˆ)
  *
- * ºØånJSON¡:
- * - ?p¡p?şÜ	
- * - îcáâşÜ
- * - Øåîcå¹Æü¿¹OK/îc	’2
+ * ç¢ºèªãƒ—ãƒ­ã‚»ã‚¹ã®JSONãƒ‡ãƒ¼ã‚¿:
+ * - ãƒ‰ãƒ©ãƒ•ãƒˆç‰ˆã®å±¥æ­´
+ * - ä¿®æ­£çŠ¶æ³
+ * - æœ€çµ‚ç¢ºå®šæƒ…å ±ï¼ˆOK/ä¿®æ­£è¦ã®å±¥æ­´ï¼‰
  *
- * JSONË :
+ * JSONæ§‹é€ :
  * {
  *   "drafts": [
  *     {
  *       "version": 1,
  *       "sentDate": "2025-10-21",
- *       "status": "îc",
+ *       "status": "ä¿®æ­£è¦",
  *       "revisionDate": "2025-10-22",
- *       "notes": "hÇ¶¤ó	ô"
+ *       "notes": "è¡¨è¨˜ä¿®æ­£ä¾é ¼"
  *     }
  *   ],
  *   "finalDate": "2025-10-23",
@@ -26,9 +26,9 @@ import { getSheetData, updateSheetData } from '@/lib/google-sheets';
  */
 
 /**
- * j÷’‡Wk	Û1-indexed	
- * @param col - j÷1=A, 26=Z, 27=AA	
- * @returns ‡W‹: "A", "Z", "AA"	
+ * åˆ—ç•ªå·ã‚’åˆ—åã«å¤‰æ›ï¼ˆ1-indexedï¼‰
+ * @param col - åˆ—ç•ªå·ï¼ˆ1=A, 26=Z, 27=AAï¼‰
+ * @returns åˆ—å: "A", "Z", "AA"
  */
 function getColumnLetter(col: number): string {
   let letter = '';
@@ -43,7 +43,7 @@ function getColumnLetter(col: number): string {
 interface DraftData {
   version: number;
   sentDate: string;
-  status: 'OK' | 'îc';
+  status: 'OK' | 'ä¿®æ­£è¦';
   revisionDate?: string;
   notes?: string;
 }
@@ -65,34 +65,34 @@ export async function PUT(request: Request) {
   try {
     const { issue, processNo, action, draft } = await request.json() as ConfirmationUpdateRequest;
 
-    // ĞêÇü·çó
+    // ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿æ¤œè¨¼
     if (!issue || !processNo || !action) {
       return NextResponse.json(
-        { success: false, error: '÷åNo¢¯·çó’šWfO`UD' },
+        { success: false, error: 'å·æ•°ã€å·¥ç¨‹Noã€ã‚¢ã‚¯ã‚·ãƒ§ãƒ³ã¯å¿…é ˆã§ã™' },
         { status: 400 }
       );
     }
 
     if ((action === 'add_draft' || action === 'update_draft') && !draft) {
       return NextResponse.json(
-        { success: false, error: 'add_draft/update_draft¢¯·çóko draft Çü¿LÅgY' },
+        { success: false, error: 'add_draft/update_draftã®å ´åˆã¯ draft ãƒ‡ãƒ¼ã‚¿ãŒå¿…è¦ã§ã™' },
         { status: 400 }
       );
     }
 
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID!;
 
-    // 1. 2We›·üÈ_V2nØÃÀüLhhÇü¿’­¼€
-    const progressData = await getSheetData(spreadsheetId, '2We›·üÈ_V2!A1:GV100');
+    // 1. é€²æ—å…¥åŠ›ã‚·ãƒ¼ãƒˆ_V2ã‹ã‚‰è©²å½“ã®å·æ•°ãƒ‡ãƒ¼ã‚¿ã‚’å–å¾—
+    const progressData = await getSheetData(spreadsheetId, 'é€²æ—å…¥åŠ›ã‚·ãƒ¼ãƒˆ_V2!A1:GV100');
 
     if (progressData.length === 0) {
       return NextResponse.json(
-        { success: false, error: '2We›·üÈ_V2L‹dKŠ~[“' },
+        { success: false, error: 'é€²æ—å…¥åŠ›ã‚·ãƒ¼ãƒˆ_V2ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“' },
         { status: 404 }
       );
     }
 
-    // 2. ØÃÀüLK‰rSånŸ>(JSON)’yš
+    // 2. å·¥ç¨‹ã®ç¢ºèªåˆ—ï¼ˆJSONï¼‰ã‚’æ¢ã™
     const headers = progressData[0];
     let actualCol = -1;
 
@@ -100,8 +100,8 @@ export async function PUT(request: Request) {
       const header = headers[col];
       if (!header) continue;
 
-      // "${processNo}Ÿ>(JSON)" ’¢Y
-      if (header === `${processNo}Ÿ>(JSON)`) {
+      // "${processNo}_ç¢ºèª(JSON)" ã‚’æ¢ã™
+      if (header === `${processNo}_ç¢ºèª(JSON)`) {
         actualCol = col;
         break;
       }
@@ -109,22 +109,22 @@ export async function PUT(request: Request) {
 
     if (actualCol === -1) {
       return NextResponse.json(
-        { success: false, error: `ºØå ${processNo} L‹dKŠ~[“JSON¡ågojDïı'LBŠ~Y	` },
+        { success: false, error: `å·¥ç¨‹ ${processNo} ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ï¼ˆJSONç¢ºèªåˆ—ãŒå­˜åœ¨ã—ã¾ã›ã‚“ï¼‰` },
         { status: 404 }
       );
     }
 
-    // 3. rS÷nL’yš
+    // 3. è©²å½“å·æ•°ã®è¡Œã‚’æ¢ã™
     const rowIndex = progressData.findIndex((row, i) => i > 0 && row[0] === issue);
 
     if (rowIndex === -1) {
       return NextResponse.json(
-        { success: false, error: `÷ ${issue} L‹dKŠ~[“` },
+        { success: false, error: `å· ${issue} ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“` },
         { status: 404 }
       );
     }
 
-    // 4. ş(nJSON’Ö—
+    // 4. ç¾åœ¨ã®JSONå†…å®¹ã‚’å–å¾—
     const currentJSON = progressData[rowIndex][actualCol];
     let confirmationData: ConfirmationData;
 
@@ -132,55 +132,55 @@ export async function PUT(request: Request) {
       try {
         confirmationData = JSON.parse(currentJSON);
       } catch (error) {
-        console.error(`JSONã¨éü (${processNo}):`, error);
+        console.error(`JSONãƒ‘ãƒ¼ã‚¹ã‚¨ãƒ©ãƒ¼ (${processNo}):`, error);
         confirmationData = { drafts: [], finalDate: null, finalVersion: null };
       }
     } else {
       confirmationData = { drafts: [], finalDate: null, finalVersion: null };
     }
 
-    // 5. ¢¯·çókÜXfJSON’ô°
+    // 5. ã‚¢ã‚¯ã‚·ãƒ§ãƒ³ã«å¿œã˜ã¦JSONå†…å®¹ã‚’æ›´æ–°
     if (action === 'add_draft') {
       if (!draft) {
         return NextResponse.json(
-          { success: false, error: 'draft Çü¿LÅgY' },
+          { success: false, error: 'draft ãƒ‡ãƒ¼ã‚¿ãŒå¿…è¦ã§ã™' },
           { status: 400 }
         );
       }
       confirmationData.drafts.push(draft);
-      console.log(`=İ ?ı : ${processNo} - ,${draft.version}? (${draft.sentDate})`);
+      console.log(`ç¢ºèª ãƒ‰ãƒ©ãƒ•ãƒˆè¿½åŠ : ${processNo} - ç¬¬${draft.version}ç‰ˆ (${draft.sentDate})`);
     } else if (action === 'update_draft') {
       if (!draft) {
         return NextResponse.json(
-          { success: false, error: 'draft Çü¿LÅgY' },
+          { success: false, error: 'draft ãƒ‡ãƒ¼ã‚¿ãŒå¿…è¦ã§ã™' },
           { status: 400 }
         );
       }
       const draftIndex = confirmationData.drafts.findIndex(d => d.version === draft.version);
       if (draftIndex === -1) {
         return NextResponse.json(
-          { success: false, error: `,${draft.version}?L‹dKŠ~[“` },
+          { success: false, error: `ç¬¬${draft.version}ç‰ˆãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“` },
           { status: 404 }
         );
       }
       confirmationData.drafts[draftIndex] = draft;
-      console.log(`=İ ?ô°: ${processNo} - ,${draft.version}?`);
+      console.log(`ç¢ºèª ãƒ‰ãƒ©ãƒ•ãƒˆæ›´æ–°: ${processNo} - ç¬¬${draft.version}ç‰ˆ`);
     } else if (action === 'finalize') {
       if (confirmationData.drafts.length === 0) {
         return NextResponse.json(
-          { success: false, error: 'ºšY‹?LBŠ~[“' },
+          { success: false, error: 'ç¢ºå®šã§ãã‚‹ãƒ‰ãƒ©ãƒ•ãƒˆç‰ˆãŒã‚ã‚Šã¾ã›ã‚“' },
           { status: 400 }
         );
       }
       const latestDraft = confirmationData.drafts[confirmationData.drafts.length - 1];
       confirmationData.finalDate = latestDraft.sentDate;
       confirmationData.finalVersion = latestDraft.version;
-      console.log(` ºš: ${processNo} - ,${latestDraft.version}? (${latestDraft.sentDate})`);
+      console.log(`ç¢ºèª ç¢ºå®š: ${processNo} - ç¬¬${latestDraft.version}ç‰ˆ (${latestDraft.sentDate})`);
     }
 
-    // 6. ô°W_JSON’·üÈkøM¼
+    // 6. æ›´æ–°å¾Œã®JSONã‚’ã‚·ãƒ¼ãƒˆã«æ›¸ãè¾¼ã¿
     const colLetter = getColumnLetter(actualCol);
-    const range = `2We›·üÈ_V2!${colLetter}${rowIndex + 1}`;
+    const range = `é€²æ—å…¥åŠ›ã‚·ãƒ¼ãƒˆ_V2!${colLetter}${rowIndex + 1}`;
 
     await updateSheetData(
       spreadsheetId,
@@ -202,11 +202,11 @@ export async function PUT(request: Request) {
     });
 
   } catch (error: any) {
-    console.error('ºØJSONô°¨éü:', error);
+    console.error('ç¢ºèªJSONæ›´æ–°ã‚¨ãƒ©ãƒ¼:', error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'ºØÇü¿nô°k1WW~W_',
+        error: error.message || 'äºˆæœŸã—ãªã„ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸ',
       },
       { status: 500 }
     );

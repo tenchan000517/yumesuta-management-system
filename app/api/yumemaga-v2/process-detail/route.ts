@@ -378,7 +378,7 @@ async function getRequiredData(
           // ファイルがない場合はpending
           results.push({
             id: `${processNo}-d${results.length + 1}`,
-            type: mapping.type as const,
+            type: mapping.type,
             name: dataType,
             status: 'pending' as const,
             optional: false,
@@ -391,7 +391,7 @@ async function getRequiredData(
 
             results.push({
               id: `${processNo}-d${results.length + 1}`,
-              type: mapping.type as const,
+              type: mapping.type,
               name: dataType,
               fileName: file.name || 'unknown',
               fileSize: `${fileSizeMB} MB`,
@@ -407,7 +407,7 @@ async function getRequiredData(
         // エラー時はpending
         results.push({
           id: `${processNo}-d${results.length + 1}`,
-          type: mapping.type as const,
+          type: mapping.type,
           name: dataType,
           status: 'pending' as const,
           optional: false,

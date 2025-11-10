@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       contactPerson: extractField(rawText, /送信先担当者名:\s*(.+)/, errors, '送信先担当者名'),
       contactEmail: extractField(rawText, /送信先メールアドレス:\s*(.+)/, errors, '送信先メールアドレス'),
       contractDate: parseWarekiDateOptional(rawText, /契約締結日:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/),
-      annualFee: parseNumber(rawText, /契約料金（税別）:\s*([0-9,]+)\s*円\/年/, errors, '契約料金'),
+      annualFee: parseContractFee(rawText, errors),
       monthlyFee: parseNumberOptional(rawText, /自動更新後の月額料金（税別）:\s*([0-9,]+)\s*円\/月/),
       contractStartDate: parseWarekiDateOptional(rawText, /契約開始日:\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/),
       contractPeriodMonths: parseNumberOptional(rawText, /契約期間:\s*([0-9,]+)\s*ヶ月/),
@@ -102,6 +102,36 @@ function parseNumber(
     return 0;
   }
   return parseInt(match[1].replace(/,/g, ''));
+}
+
+// 契約料金を複数のフォーマットから抽出
+function parseContractFee(text: string, errors: string[]): number {
+  // パターン1: 契約料金（税別）: 16,445円/年
+  let match = text.match(/契約料金（税別）:\s*([0-9,]+)\s*円\/年/);
+  if (match) {
+    return parseInt(match[1].replace(/,/g, ''));
+  }
+
+  // パターン2: 契約料金（税別）: 16,445円＋税＝計18,089円
+  match = text.match(/契約料金（税別）:\s*([0-9,]+)\s*円/);
+  if (match) {
+    return parseInt(match[1].replace(/,/g, ''));
+  }
+
+  // パターン3: 掲載プランセクション内の「契約料金（税別）:」
+  match = text.match(/【◎掲載プラン】[\s\S]*?契約料金（税別）:\s*([0-9,]+)\s*円/);
+  if (match) {
+    return parseInt(match[1].replace(/,/g, ''));
+  }
+
+  // パターン4: 契約プランセクション内の「契約料金（税別）:」
+  match = text.match(/【◎契約プラン】[\s\S]*?契約料金（税別）:\s*([0-9,]+)\s*円/);
+  if (match) {
+    return parseInt(match[1].replace(/,/g, ''));
+  }
+
+  errors.push('契約料金が見つかりません');
+  return 0;
 }
 
 // 任意の数値フィールド用（エラーを追加しない）

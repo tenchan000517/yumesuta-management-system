@@ -88,6 +88,18 @@ export function DataSubmissionSection({
   const [companyFolderStatus, setCompanyFolderStatus] = useState<any[]>([]);
   const [loadingCompanyStatus, setLoadingCompanyStatus] = useState(false);
 
+  // defaultIssueが変更されたらselectedIssueも更新
+  useEffect(() => {
+    console.log('=== Issue Sync Debug ===');
+    console.log('defaultIssue:', defaultIssue);
+    console.log('selectedIssue:', selectedIssue);
+
+    if (defaultIssue && defaultIssue !== selectedIssue) {
+      console.log('Updating selectedIssue to:', defaultIssue);
+      setSelectedIssue(defaultIssue);
+    }
+  }, [defaultIssue, selectedIssue]);
+
   // 月号変更時にデータ提出状況を取得（デバウンス付き）
   useEffect(() => {
     // ローディング中は重複リクエストを防止
@@ -138,7 +150,13 @@ export function DataSubmissionSection({
       const fetchFolderFiles = async () => {
         // カテゴリモードの場合
         if (uploadMode === 'category') {
+          console.log('=== Fetch Folder Files Debug ===');
+          console.log('selectedCategory:', selectedCategory);
+          console.log('selectedDataType:', selectedDataType);
+          console.log('selectedIssue:', selectedIssue);
+
           if (!selectedCategory || !selectedDataType || !selectedIssue) {
+            console.log('⚠️ Skipping file fetch - missing required params');
             setFolderFiles([]);
             setSelectedFile(null);
             return;
@@ -298,6 +316,12 @@ export function DataSubmissionSection({
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
+    // 月号の選択チェック
+    if (!selectedIssue || selectedIssue === '') {
+      alert('❌ 月号を選択してください\n\nページ上部の「月号選択」で月号を選択してから、ファイルをアップロードしてください。');
+      return;
+    }
+
     setUploading(true);
 
     try {
@@ -314,9 +338,24 @@ export function DataSubmissionSection({
         formData.append('categoryId', selectedCategory);
         formData.append('dataType', selectedDataType);
 
-        // 月号を "2025_11" 形式に変換
-        const issue = selectedIssue.replace('年', '_').replace('月号', '');
+        // 月号を "2025_11" 形式に変換（ゼロパディング対応）
+        const issue = selectedIssue.replace(/(\d{4})年(\d{1,2})月号/, (_, year, month) => {
+          const paddedMonth = month.padStart(2, '0');
+          return `${year}_${paddedMonth}`;
+        });
         formData.append('issue', issue);
+
+        // デバッグログ
+        console.log('=== Upload Request Debug ===');
+        console.log('selectedCategory:', selectedCategory);
+        console.log('selectedDataType:', selectedDataType);
+        console.log('selectedIssue:', selectedIssue);
+        console.log('converted issue:', issue);
+        console.log('files:', files);
+        console.log('FormData entries:');
+        for (const [key, value] of formData.entries()) {
+          console.log(`  ${key}:`, value);
+        }
 
       } else {
         // 企業モード

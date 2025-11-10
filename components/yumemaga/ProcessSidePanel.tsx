@@ -75,6 +75,9 @@ export function ProcessSidePanel({
   const [companyList, setCompanyList] = useState<string[]>([]);
   const [pageList, setPageList] = useState<string[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
+  const [copiedList, setCopiedList] = useState<'companies' | 'pages' | null>(null);
+  const [copiedInstructions, setCopiedInstructions] = useState(false);
+  const [htmlSource, setHtmlSource] = useState('');
 
   // 準備工程（次月号準備）用のstate
   const [preliminaryFormatPreview, setPreliminaryFormatPreview] = useState('');
@@ -355,6 +358,8 @@ ${htmlSource || '（HTMLソースを貼り付けてください）'}
 
   // 準備工程用: 事前報告フォーマット生成
   const handleGeneratePreliminaryFormat = async () => {
+    if (!process) return;
+
     try {
       const res = await fetch('/api/yumemaga-v2/interview-templates');
       const data = await res.json();
@@ -442,6 +447,8 @@ ${template.googleFormUrl}
 
   // 準備工程用: 実施報告フォーマット生成
   const handleGenerateCompletionFormat = async () => {
+    if (!process) return;
+
     try {
       const res = await fetch('/api/yumemaga-v2/interview-templates');
       const data = await res.json();
@@ -486,6 +493,8 @@ ${template.googleFormUrl}
 
   // 準備工程用: 報告パース・保存
   const handleParseReport = async () => {
+    if (!process) return;
+
     try {
       const lines = reportInput.split('\n');
 

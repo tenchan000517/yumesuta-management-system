@@ -8,7 +8,7 @@ import type { CompanyInfo } from '@/types/company-info';
  */
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID;
@@ -19,7 +19,7 @@ export async function GET(
       );
     }
 
-    const companyId = params.id;
+    const { id: companyId } = await params;
 
     // Google Sheets API の認証
     const serviceAccountKey = JSON.parse(
@@ -133,7 +133,7 @@ export async function GET(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const spreadsheetId = process.env.YUMEMAGA_SPREADSHEET_ID;
@@ -144,7 +144,7 @@ export async function PUT(
       );
     }
 
-    const companyId = params.id;
+    const { id: companyId } = await params;
     const body = await request.json();
     const companyData: Partial<CompanyInfo> = body;
 

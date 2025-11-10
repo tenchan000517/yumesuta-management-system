@@ -520,7 +520,7 @@ export default function FasterWhisperSetupGuide() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <h3 className="font-semibold text-green-900 mb-2">使い方</h3>
             <div className="bg-gray-900 text-green-400 p-3 rounded-lg font-mono text-sm overflow-x-auto">
-              python transcribe.py "音声ファイルのパス.mp3"
+              python transcribe.py &quot;音声ファイルのパス.mp3&quot;
             </div>
             <p className="text-sm text-green-800 mt-2">
               音声ファイルと同じフォルダに .txt ファイルが生成されます
@@ -551,7 +551,7 @@ export default function FasterWhisperSetupGuide() {
 
           <div className="relative mb-4">
             <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
-              python ~/transcribe.py "音声ファイルのパス.mp3"
+              python ~/transcribe.py &quot;音声ファイルのパス.mp3&quot;
             </div>
             <button
               onClick={() => handleCopyCommand('python ~/transcribe.py "音声ファイルのパス.mp3"', "test-run")}
@@ -567,7 +567,7 @@ export default function FasterWhisperSetupGuide() {
               実行例
             </p>
             <div className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs">
-              python ~/transcribe.py "C:\Users\あなたのユーザー名\Downloads\test.mp3"
+              python ~/transcribe.py &quot;C:\Users\あなたのユーザー名\Downloads\test.mp3&quot;
             </div>
           </div>
 
@@ -590,7 +590,7 @@ export default function FasterWhisperSetupGuide() {
           <div className="space-y-4">
             <div className="border-l-4 border-red-500 pl-4">
               <h3 className="font-semibold text-gray-900 mb-1">
-                エラー: ModuleNotFoundError: No module named 'faster_whisper'
+                エラー: ModuleNotFoundError: No module named &apos;faster_whisper&apos;
               </h3>
               <p className="text-sm text-gray-700 mb-2">
                 → 仮想環境を有効化していない、またはインストールが失敗しています。
@@ -639,7 +639,7 @@ export default function FasterWhisperSetupGuide() {
               </p>
               <div className="relative mb-1">
                 <div className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs">
-                  python ~/transcribe.py "audio.mp3" --model small
+                  python ~/transcribe.py &quot;audio.mp3&quot; --model small
                 </div>
                 <button
                   onClick={() => handleCopyCommand('python ~/transcribe.py "audio.mp3" --model small', "ts-small")}
@@ -727,7 +727,7 @@ export default function FasterWhisperSetupGuide() {
                   <li>テキストエディタ（メモ帳、VSCodeなど）を開く</li>
                   <li>コピーしたコードを貼り付け</li>
                   <li><code className="bg-white px-1 py-0.5 rounded">transcribe.py</code> という名前で保存（任意の場所）</li>
-                  <li>ターミナルから実行: <code className="bg-white px-1 py-0.5 rounded">python transcribe.py "音声ファイル.mp3"</code></li>
+                  <li>ターミナルから実行: <code className="bg-white px-1 py-0.5 rounded">python transcribe.py &quot;音声ファイル.mp3&quot;</code></li>
                 </ol>
               </div>
 

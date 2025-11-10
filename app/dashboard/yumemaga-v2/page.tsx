@@ -904,6 +904,23 @@ export default function YumeMagaV2Page() {
           </div>
         )}
 
+        {/* 認証管理リンク（認証済みでもエラーが出る場合用） */}
+        {authStatus && authStatus.authenticated && (
+          <div className="flex justify-end">
+            <button
+              onClick={async () => {
+                if (confirm('認証トークンをクリアして再認証しますか？')) {
+                  await fetch('/api/auth/clear', { method: 'POST' });
+                  window.location.reload();
+                }
+              }}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              認証に問題がある場合はこちら
+            </button>
+          </div>
+        )}
+
         {/* 新規号作成 / 月号選択 */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -1016,7 +1033,7 @@ export default function YumeMagaV2Page() {
             ...(companyPageProduction.updatedCompanies || [])
           ].map(company => ({
             ...company,
-            tasks: company.tasks.filter(task =>
+            tasks: company.tasks.filter((task: any) =>
               task.taskId === 'preparation-contract-check' ||
               task.taskId === 'preparation-form-send' ||
               task.taskId === 'preparation-data-submission'
@@ -1056,7 +1073,7 @@ export default function YumeMagaV2Page() {
             ...(companyPageProduction.updatedCompanies || [])
           ].map(company => ({
             ...company,
-            tasks: company.tasks.filter(task =>
+            tasks: company.tasks.filter((task: any) =>
               task.taskId === 'overall-internal-check' ||
               task.taskId === 'overall-confirmation'
             )
